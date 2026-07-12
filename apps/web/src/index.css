@@ -13,6 +13,8 @@
   --workspace-native-controls-inset: 0px;
   --workspace-titlebar-control-size: 1.75rem;
   --workspace-titlebar-control-gap: 0.75rem;
+  --base-motion-fast: 120ms;
+  --base-motion-standard: 180ms;
 }
 
 [data-slot="sidebar-wrapper"] {
@@ -66,6 +68,11 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-base-canvas: var(--base-canvas);
+  --color-base-surface-raised: var(--base-surface-raised);
+  --color-base-canvas-grid: var(--base-canvas-grid);
+  --color-base-canvas-edge: var(--base-canvas-edge);
+  --color-base-canvas-edge-active: var(--base-canvas-edge-active);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -224,10 +231,26 @@
   animation-duration: 0s !important;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 :root {
   color-scheme: light;
-  --radius: 0.625rem;
+  --radius: 0.5rem;
   --background: var(--color-white);
+  --base-canvas: color-mix(in srgb, var(--color-neutral-100) 68%, var(--color-white));
+  --base-surface-raised: var(--color-white);
+  --base-canvas-grid: color-mix(in srgb, var(--color-neutral-500) 22%, transparent);
+  --base-canvas-edge: color-mix(in srgb, var(--color-neutral-600) 58%, transparent);
+  --base-canvas-edge-active: oklch(0.55 0.18 264);
   --app-chrome-background: var(--background);
   --foreground: var(--color-neutral-800);
   --card: var(--color-white);
@@ -257,6 +280,11 @@
   @variant dark {
     color-scheme: dark;
     --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
+    --base-canvas: color-mix(in srgb, var(--background) 95%, var(--color-white));
+    --base-surface-raised: color-mix(in srgb, var(--background) 96%, var(--color-white));
+    --base-canvas-grid: color-mix(in srgb, var(--color-neutral-500) 18%, transparent);
+    --base-canvas-edge: color-mix(in srgb, var(--color-neutral-400) 46%, transparent);
+    --base-canvas-edge-active: oklch(0.67 0.16 264);
     --app-chrome-background: var(--background);
     --foreground: var(--color-neutral-100);
     --card: color-mix(in srgb, var(--background) 98%, var(--color-white));

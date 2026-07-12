@@ -29,7 +29,6 @@ import {
   FolderPlusIcon,
   LinkIcon,
   MessageSquareIcon,
-  SettingsIcon,
   SquarePenIcon,
 } from "lucide-react";
 import {
@@ -45,7 +44,10 @@ import {
   type ReactNode,
 } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { OpenAddProjectCommandPaletteProvider } from "../commandPaletteContext";
+import {
+  OpenAddProjectCommandPaletteProvider,
+  OpenCommandPaletteProvider,
+} from "../commandPaletteContext";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
@@ -127,6 +129,7 @@ import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
+import { BASE_NAVIGATION_ITEMS } from "../features/app-shell/navigation";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 
@@ -374,6 +377,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     openIntent: null,
   });
   const setOpen = useCallback((open: boolean) => dispatch({ _tag: "SetOpen", open }), []);
+  const openCommandPalette = useCallback(() => dispatch({ _tag: "SetOpen", open: true }), []);
   const toggleOpen = useCallback(() => dispatch({ _tag: "Toggle" }), []);
   const openAddProject = useCallback(() => dispatch({ _tag: "OpenAddProject" }), []);
   const clearOpenIntent = useCallback(() => dispatch({ _tag: "ClearOpenIntent" }), []);
@@ -411,19 +415,21 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   }, [keybindings, terminalOpen, toggleOpen]);
 
   return (
-    <OpenAddProjectCommandPaletteProvider openAddProject={openAddProject}>
-      <ComposerHandleContext value={composerHandleRef}>
-        <CommandDialog open={state.open} onOpenChange={setOpen}>
-          {children}
-          <CommandPaletteDialog
-            open={state.open}
-            openIntent={state.openIntent}
-            setOpen={setOpen}
-            clearOpenIntent={clearOpenIntent}
-          />
-        </CommandDialog>
-      </ComposerHandleContext>
-    </OpenAddProjectCommandPaletteProvider>
+    <OpenCommandPaletteProvider openCommandPalette={openCommandPalette}>
+      <OpenAddProjectCommandPaletteProvider openAddProject={openAddProject}>
+        <ComposerHandleContext value={composerHandleRef}>
+          <CommandDialog open={state.open} onOpenChange={setOpen}>
+            {children}
+            <CommandPaletteDialog
+              open={state.open}
+              openIntent={state.openIntent}
+              setOpen={setOpen}
+              clearOpenIntent={clearOpenIntent}
+            />
+          </CommandDialog>
+        </ComposerHandleContext>
+      </OpenAddProjectCommandPaletteProvider>
+    </OpenCommandPaletteProvider>
   );
 }
 
@@ -1045,16 +1051,20 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
-  actionItems.push({
-    kind: "action",
-    value: "action:settings",
-    searchTerms: ["settings", "preferences", "configuration", "keybindings"],
-    title: "Open settings",
-    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
-    run: async () => {
-      await navigate({ to: "/settings" });
-    },
-  });
+  for (const item of BASE_NAVIGATION_ITEMS) {
+    const Icon = item.icon;
+    actionItems.push({
+      kind: "action",
+      value: `action:navigate:${item.id}`,
+      searchTerms: [item.label, item.description, ...item.searchTerms],
+      title: `Open ${item.label}`,
+      description: item.description,
+      icon: <Icon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: item.to });
+      },
+    });
+  }
 
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   const sourceSelectionViewValue =

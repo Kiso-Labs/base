@@ -1,6 +1,18 @@
 import { createContext, use, type ReactNode } from "react";
 
 const OpenAddProjectCommandPaletteContext = createContext<(() => void) | null>(null);
+const OpenCommandPaletteContext = createContext<(() => void) | null>(null);
+
+export function OpenCommandPaletteProvider(props: {
+  readonly children: ReactNode;
+  readonly openCommandPalette: () => void;
+}) {
+  return (
+    <OpenCommandPaletteContext value={props.openCommandPalette}>
+      {props.children}
+    </OpenCommandPaletteContext>
+  );
+}
 
 export function OpenAddProjectCommandPaletteProvider(props: {
   readonly children: ReactNode;
@@ -19,6 +31,14 @@ export function useOpenAddProjectCommandPalette(): () => void {
     throw new Error("Command palette actions must be used inside CommandPalette");
   }
   return openAddProject;
+}
+
+export function useOpenCommandPalette(): () => void {
+  const openCommandPalette = use(OpenCommandPaletteContext);
+  if (!openCommandPalette) {
+    throw new Error("Command palette actions must be used inside CommandPalette");
+  }
+  return openCommandPalette;
 }
 
 /** Read at event time so the chat tree does not subscribe to transient dialog state. */

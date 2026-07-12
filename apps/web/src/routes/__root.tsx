@@ -52,6 +52,7 @@ import {
   createKeybindingsUpdateToastController,
   type KeybindingsUpdateToastController,
 } from "../components/KeybindingsUpdateToast.logic";
+import { BaseWorkspaceProvider } from "../features/app-shell/BaseWorkspaceContext";
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
@@ -116,11 +117,13 @@ function RootRouteView() {
   }
 
   const appShell = (
-    <CommandPalette>
-      <AppSidebarLayout>
-        <Outlet />
-      </AppSidebarLayout>
-    </CommandPalette>
+    <BaseWorkspaceProvider>
+      <CommandPalette>
+        <AppSidebarLayout>
+          <Outlet />
+        </AppSidebarLayout>
+      </CommandPalette>
+    </BaseWorkspaceProvider>
   );
 
   return (

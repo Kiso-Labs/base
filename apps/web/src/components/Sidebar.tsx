@@ -1,11 +1,13 @@
 import {
   ArchiveIcon,
   ArrowUpDownIcon,
+  BellIcon,
   ChevronRightIcon,
   CloudIcon,
   ContainerIcon,
   FolderPlusIcon,
   Globe2Icon,
+  ListChecksIcon,
   LoaderIcon,
   SearchIcon,
   SettingsIcon,
@@ -111,6 +113,13 @@ import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useDesktopUpdateState } from "../state/desktopUpdate";
+import { BasePrimaryNavigation } from "../features/app-shell/BasePrimaryNavigation";
+import { useBaseWorkspace } from "../features/app-shell/BaseWorkspaceContext";
+import { resolveBaseNavigationItem } from "../features/app-shell/navigation";
+import {
+  selectActiveRunCount,
+  selectAttentionCount,
+} from "../features/app-shell/workspaceRepository";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import { projectEnvironment } from "../state/projects";
@@ -2760,16 +2769,16 @@ function SidebarBrand() {
 
   return (
     <Link
-      aria-label="Go to threads"
+      aria-label="Open Base inbox"
       className="sidebar-brand ml-[var(--workspace-titlebar-content-left)] h-7 w-fit min-w-0 shrink-0 items-center gap-1 overflow-hidden rounded-md text-foreground outline-hidden ring-ring focus-visible:ring-2"
-      to="/"
+      to="/inbox"
     >
-      <T3Wordmark />
-      <span className="truncate text-sm font-medium tracking-tight text-muted-foreground">
-        Code
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-[5px] border border-border bg-foreground text-[10px] font-semibold text-background shadow-sm/5">
+        B
       </span>
-      <span className="sidebar-brand-stage shrink-0 items-center whitespace-nowrap rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
-        {stageLabel}
+      <span className="truncate text-sm font-semibold tracking-tight text-foreground">Base</span>
+      <span className="sidebar-brand-stage shrink-0 items-center whitespace-nowrap text-[9px] font-medium tracking-wide text-muted-foreground/55">
+        Kiso Labs · {stageLabel}
       </span>
     </Link>
   );
@@ -2785,36 +2794,57 @@ function useSidebarStageLabel() {
   });
 }
 
-function T3Wordmark() {
-  return (
-    <svg
-      aria-label="T3"
-      className="h-2.5 w-auto shrink-0 text-foreground"
-      viewBox="15.5309 37 94.3941 56.96"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M33.4509 93V47.56H15.5309V37H64.3309V47.56H46.4109V93H33.4509ZM86.7253 93.96C82.832 93.96 78.9653 93.4533 75.1253 92.44C71.2853 91.3733 68.032 89.88 65.3653 87.96L70.4053 78.04C72.5386 79.5867 75.0186 80.8133 77.8453 81.72C80.672 82.6267 83.5253 83.08 86.4053 83.08C89.6586 83.08 92.2186 82.44 94.0853 81.16C95.952 79.88 96.8853 78.12 96.8853 75.88C96.8853 73.7467 96.0586 72.0667 94.4053 70.84C92.752 69.6133 90.0853 69 86.4053 69H80.4853V60.44L96.0853 42.76L97.5253 47.4H68.1653V37H107.365V45.4L91.8453 63.08L85.2853 59.32H89.0453C95.9253 59.32 101.125 60.8667 104.645 63.96C108.165 67.0533 109.925 71.0267 109.925 75.88C109.925 79.0267 109.099 81.9867 107.445 84.76C105.792 87.48 103.259 89.6933 99.8453 91.4C96.432 93.1067 92.0586 93.96 86.7253 93.96Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const navigate = useNavigate();
+  const { snapshot } = useBaseWorkspace();
   const { isMobile, setOpenMobile } = useSidebar();
+  const activeRunCount = selectActiveRunCount(snapshot);
+  const attentionCount = selectAttentionCount(snapshot);
   const handleSettingsClick = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);
     }
     void navigate({ to: "/settings" });
   }, [isMobile, navigate, setOpenMobile]);
+  const handleRunsClick = useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+    void navigate({ to: "/runs" });
+  }, [isMobile, navigate, setOpenMobile]);
+  const handleInboxClick = useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+    void navigate({ to: "/inbox" });
+  }, [isMobile, navigate, setOpenMobile]);
 
   return (
     <SidebarFooter className="p-2">
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
+      <div className="mb-1 grid grid-cols-2 gap-1">
+        <Button
+          className="h-7 justify-start gap-1.5 px-2 text-[11px] text-muted-foreground"
+          onClick={handleRunsClick}
+          size="xs"
+          variant="ghost"
+        >
+          <ListChecksIcon className="size-3.5" />
+          Queue
+          <span className="ml-auto rounded-sm bg-info/10 px-1 font-mono text-[9px] text-info-foreground">
+            {activeRunCount}
+          </span>
+        </Button>
+        <Button
+          className="h-7 justify-start gap-1.5 px-2 text-[11px] text-muted-foreground"
+          onClick={handleInboxClick}
+          size="xs"
+          variant="ghost"
+        >
+          <BellIcon className="size-3.5" />
+          Alerts
+          <span className="ml-auto rounded-sm bg-warning/12 px-1 font-mono text-[9px] text-warning-foreground">
+            {attentionCount}
+          </span>
+        </Button>
+      </div>
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
@@ -2822,8 +2852,16 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
             className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
             onClick={handleSettingsClick}
           >
+            <span className="flex size-6 items-center justify-center rounded-[5px] border border-border bg-card text-[9px] font-semibold text-foreground">
+              KL
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-xs text-foreground">Kiso Labs</span>
+              <span className="block truncate text-[9px] text-muted-foreground/65">
+                Workspace settings
+              </span>
+            </span>
             <SettingsIcon className="size-3.5" />
-            <span className="text-xs">Settings</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
@@ -3111,6 +3149,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const isOnSettings = pathname.startsWith("/settings");
+  const isOnAgentWorkspace = resolveBaseNavigationItem(pathname)?.id === "agents";
   const sidebarThreadSortOrder = useClientSettings((s) => s.sidebarThreadSortOrder);
   const sidebarProjectSortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);
   const sidebarProjectGroupingMode = useClientSettings((s) => s.sidebarProjectGroupingMode);
@@ -3699,10 +3738,12 @@ export default function Sidebar() {
         <SidebarThreadDetailPrewarmer key={scopedThreadKey(threadRef)} threadRef={threadRef} />
       ))}
       <SidebarChromeHeader isElectron={isElectron} />
+      <BasePrimaryNavigation />
+      <SidebarSeparator />
 
       {isOnSettings ? (
         <SettingsSidebarNav pathname={pathname} />
-      ) : (
+      ) : isOnAgentWorkspace ? (
         <>
           <SidebarProjectsContent
             showArm64IntelBuildWarning={showArm64IntelBuildWarning}
@@ -3743,6 +3784,11 @@ export default function Sidebar() {
           />
 
           <SidebarSeparator />
+          <SidebarChromeFooter />
+        </>
+      ) : (
+        <>
+          <div className="min-h-0 flex-1" />
           <SidebarChromeFooter />
         </>
       )}

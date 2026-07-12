@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PairRouteImport } from './routes/pair'
 import { Route as ChatRouteImport } from './routes/_chat'
+import { Route as BaseRouteImport } from './routes/_base'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
@@ -20,6 +21,13 @@ import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
 import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagnostics'
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
+import { Route as BaseWorkflowsRouteImport } from './routes/_base.workflows'
+import { Route as BaseRunsRouteImport } from './routes/_base.runs'
+import { Route as BaseRepositoryRouteImport } from './routes/_base.repository'
+import { Route as BaseIssuesRouteImport } from './routes/_base.issues'
+import { Route as BaseInboxRouteImport } from './routes/_base.inbox'
+import { Route as BaseBoardRouteImport } from './routes/_base.board'
+import { Route as BaseAgentsRouteImport } from './routes/_base.agents'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
 
@@ -35,6 +43,10 @@ const PairRoute = PairRouteImport.update({
 } as any)
 const ChatRoute = ChatRouteImport.update({
   id: '/_chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BaseRoute = BaseRouteImport.update({
+  id: '/_base',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatIndexRoute = ChatIndexRouteImport.update({
@@ -77,6 +89,41 @@ const SettingsArchivedRoute = SettingsArchivedRouteImport.update({
   path: '/archived',
   getParentRoute: () => SettingsRoute,
 } as any)
+const BaseWorkflowsRoute = BaseWorkflowsRouteImport.update({
+  id: '/workflows',
+  path: '/workflows',
+  getParentRoute: () => BaseRoute,
+} as any)
+const BaseRunsRoute = BaseRunsRouteImport.update({
+  id: '/runs',
+  path: '/runs',
+  getParentRoute: () => BaseRoute,
+} as any)
+const BaseRepositoryRoute = BaseRepositoryRouteImport.update({
+  id: '/repository',
+  path: '/repository',
+  getParentRoute: () => BaseRoute,
+} as any)
+const BaseIssuesRoute = BaseIssuesRouteImport.update({
+  id: '/issues',
+  path: '/issues',
+  getParentRoute: () => BaseRoute,
+} as any)
+const BaseInboxRoute = BaseInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => BaseRoute,
+} as any)
+const BaseBoardRoute = BaseBoardRouteImport.update({
+  id: '/board',
+  path: '/board',
+  getParentRoute: () => BaseRoute,
+} as any)
+const BaseAgentsRoute = BaseAgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => BaseRoute,
+} as any)
 const ChatDraftDraftIdRoute = ChatDraftDraftIdRouteImport.update({
   id: '/draft/$draftId',
   path: '/draft/$draftId',
@@ -93,6 +140,13 @@ export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/agents': typeof BaseAgentsRoute
+  '/board': typeof BaseBoardRoute
+  '/inbox': typeof BaseInboxRoute
+  '/issues': typeof BaseIssuesRoute
+  '/repository': typeof BaseRepositoryRoute
+  '/runs': typeof BaseRunsRoute
+  '/workflows': typeof BaseWorkflowsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -104,8 +158,16 @@ export interface FileRoutesByFullPath {
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof ChatIndexRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/agents': typeof BaseAgentsRoute
+  '/board': typeof BaseBoardRoute
+  '/inbox': typeof BaseInboxRoute
+  '/issues': typeof BaseIssuesRoute
+  '/repository': typeof BaseRepositoryRoute
+  '/runs': typeof BaseRunsRoute
+  '/workflows': typeof BaseWorkflowsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -113,15 +175,22 @@ export interface FileRoutesByTo {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
-  '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/_base': typeof BaseRouteWithChildren
   '/_chat': typeof ChatRouteWithChildren
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/_base/agents': typeof BaseAgentsRoute
+  '/_base/board': typeof BaseBoardRoute
+  '/_base/inbox': typeof BaseInboxRoute
+  '/_base/issues': typeof BaseIssuesRoute
+  '/_base/repository': typeof BaseRepositoryRoute
+  '/_base/runs': typeof BaseRunsRoute
+  '/_base/workflows': typeof BaseWorkflowsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -139,6 +208,13 @@ export interface FileRouteTypes {
     | '/'
     | '/pair'
     | '/settings'
+    | '/agents'
+    | '/board'
+    | '/inbox'
+    | '/issues'
+    | '/repository'
+    | '/runs'
+    | '/workflows'
     | '/settings/archived'
     | '/settings/connections'
     | '/settings/diagnostics'
@@ -150,8 +226,16 @@ export interface FileRouteTypes {
     | '/draft/$draftId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/pair'
     | '/settings'
+    | '/agents'
+    | '/board'
+    | '/inbox'
+    | '/issues'
+    | '/repository'
+    | '/runs'
+    | '/workflows'
     | '/settings/archived'
     | '/settings/connections'
     | '/settings/diagnostics'
@@ -159,14 +243,21 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/providers'
     | '/settings/source-control'
-    | '/'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
   id:
     | '__root__'
+    | '/_base'
     | '/_chat'
     | '/pair'
     | '/settings'
+    | '/_base/agents'
+    | '/_base/board'
+    | '/_base/inbox'
+    | '/_base/issues'
+    | '/_base/repository'
+    | '/_base/runs'
+    | '/_base/workflows'
     | '/settings/archived'
     | '/settings/connections'
     | '/settings/diagnostics'
@@ -180,6 +271,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  BaseRoute: typeof BaseRouteWithChildren
   ChatRoute: typeof ChatRouteWithChildren
   PairRoute: typeof PairRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -206,6 +298,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_base': {
+      id: '/_base'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof BaseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_chat/': {
@@ -264,6 +363,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsArchivedRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/_base/workflows': {
+      id: '/_base/workflows'
+      path: '/workflows'
+      fullPath: '/workflows'
+      preLoaderRoute: typeof BaseWorkflowsRouteImport
+      parentRoute: typeof BaseRoute
+    }
+    '/_base/runs': {
+      id: '/_base/runs'
+      path: '/runs'
+      fullPath: '/runs'
+      preLoaderRoute: typeof BaseRunsRouteImport
+      parentRoute: typeof BaseRoute
+    }
+    '/_base/repository': {
+      id: '/_base/repository'
+      path: '/repository'
+      fullPath: '/repository'
+      preLoaderRoute: typeof BaseRepositoryRouteImport
+      parentRoute: typeof BaseRoute
+    }
+    '/_base/issues': {
+      id: '/_base/issues'
+      path: '/issues'
+      fullPath: '/issues'
+      preLoaderRoute: typeof BaseIssuesRouteImport
+      parentRoute: typeof BaseRoute
+    }
+    '/_base/inbox': {
+      id: '/_base/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof BaseInboxRouteImport
+      parentRoute: typeof BaseRoute
+    }
+    '/_base/board': {
+      id: '/_base/board'
+      path: '/board'
+      fullPath: '/board'
+      preLoaderRoute: typeof BaseBoardRouteImport
+      parentRoute: typeof BaseRoute
+    }
+    '/_base/agents': {
+      id: '/_base/agents'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof BaseAgentsRouteImport
+      parentRoute: typeof BaseRoute
+    }
     '/_chat/draft/$draftId': {
       id: '/_chat/draft/$draftId'
       path: '/draft/$draftId'
@@ -280,6 +428,28 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface BaseRouteChildren {
+  BaseAgentsRoute: typeof BaseAgentsRoute
+  BaseBoardRoute: typeof BaseBoardRoute
+  BaseInboxRoute: typeof BaseInboxRoute
+  BaseIssuesRoute: typeof BaseIssuesRoute
+  BaseRepositoryRoute: typeof BaseRepositoryRoute
+  BaseRunsRoute: typeof BaseRunsRoute
+  BaseWorkflowsRoute: typeof BaseWorkflowsRoute
+}
+
+const BaseRouteChildren: BaseRouteChildren = {
+  BaseAgentsRoute: BaseAgentsRoute,
+  BaseBoardRoute: BaseBoardRoute,
+  BaseInboxRoute: BaseInboxRoute,
+  BaseIssuesRoute: BaseIssuesRoute,
+  BaseRepositoryRoute: BaseRepositoryRoute,
+  BaseRunsRoute: BaseRunsRoute,
+  BaseWorkflowsRoute: BaseWorkflowsRoute,
+}
+
+const BaseRouteWithChildren = BaseRoute._addFileChildren(BaseRouteChildren)
 
 interface ChatRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
@@ -320,6 +490,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 )
 
 const rootRouteChildren: RootRouteChildren = {
+  BaseRoute: BaseRouteWithChildren,
   ChatRoute: ChatRouteWithChildren,
   PairRoute: PairRoute,
   SettingsRoute: SettingsRouteWithChildren,

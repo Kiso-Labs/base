@@ -79,18 +79,34 @@
       }
 
       #boot-shell-logo {
-        width: 64px;
-        height: 64px;
-        object-fit: contain;
+        display: flex;
+        width: 48px;
+        height: 48px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgb(0 0 0 / 12%);
+        border-radius: 12px;
+        background: #262626;
+        color: #ffffff;
+        font-size: 20px;
+        font-weight: 650;
+        box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
+      }
+
+      html.dark #boot-shell-logo {
+        border-color: rgb(255 255 255 / 12%);
+        background: #f5f5f5;
+        color: #161616;
+        box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
       }
     </style>
-    <title>T3 Code (Alpha)</title>
+    <title>Base (Alpha)</title>
   </head>
   <body>
     <div id="root">
       <div id="boot-shell">
-        <div id="boot-shell-card" aria-label="T3 Code splash screen">
-          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="T3 Code" />
+        <div id="boot-shell-card" aria-label="Base splash screen">
+          <div id="boot-shell-logo" aria-hidden="true">B</div>
         </div>
       </div>
     </div>
