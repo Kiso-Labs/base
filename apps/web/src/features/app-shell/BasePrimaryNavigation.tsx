@@ -1,5 +1,15 @@
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LibraryBigIcon, SearchIcon } from "lucide-react";
+import { Link, useLocation } from "@tanstack/react-router";
+import {
+  BoxIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  EllipsisIcon,
+  Layers3Icon,
+  MegaphoneIcon,
+  ScanIcon,
+  SearchIcon,
+} from "lucide-react";
+import { useState } from "react";
 
 import { useOpenCommandPalette } from "~/commandPaletteContext";
 import { Kbd } from "~/components/ui/kbd";
@@ -19,28 +29,59 @@ import {
   type BaseNavigationItem,
 } from "./navigation";
 import { useCommandPaletteShortcutLabel } from "./useCommandPaletteShortcutLabel";
-import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
 import { selectActiveRunCount, selectAttentionCount } from "./workspaceRepository";
 
-const WORK_NAVIGATION_IDS = new Set(["inbox", "issues", "board", "workflows", "runs"]);
+const navigationItemById = new Map(BASE_NAVIGATION_ITEMS.map((item) => [item.id, item]));
+
+function navigationItem(
+  id: BaseNavigationId,
+  overrides: Partial<Pick<BaseNavigationItem, "icon" | "label">> = {},
+): BaseNavigationItem {
+  const item = navigationItemById.get(id);
+  if (!item) throw new Error(`Missing Base navigation item: ${id}`);
+  return { ...item, ...overrides };
+}
+
+const QUICK_NAVIGATION_ITEMS = [
+  navigationItem("inbox"),
+  navigationItem("issues", { icon: ScanIcon, label: "My issues" }),
+] as const;
+
+const WORKSPACE_NAVIGATION_ITEMS = [
+  navigationItem("agents", { icon: BoxIcon, label: "Projects" }),
+  navigationItem("board", { icon: Layers3Icon, label: "Views" }),
+  navigationItem("workflows", { icon: EllipsisIcon, label: "More" }),
+] as const;
+
+const TEAM_NAVIGATION_ITEMS = [
+  navigationItem("issues", { icon: CopyIcon }),
+  navigationItem("agents", { icon: BoxIcon, label: "Projects" }),
+  navigationItem("board", { icon: Layers3Icon, label: "Views" }),
+] as const;
+
+const BUILD_NAVIGATION_ITEMS = [
+  navigationItem("workflows"),
+  navigationItem("runs"),
+  navigationItem("repository"),
+  navigationItem("settings"),
+] as const;
+
+const TEAM_NAVIGATION_IDS = new Set<BaseNavigationId>(["issues", "agents", "board"]);
 
 export function BasePrimaryNavigation() {
   const pathname = useLocation({ select: (location) => location.pathname });
-  const navigate = useNavigate();
   const activeItem = resolveBaseNavigationItem(pathname);
   const openCommandPalette = useOpenCommandPalette();
   const commandPaletteShortcutLabel = useCommandPaletteShortcutLabel();
   const { selectedProject, snapshot } = useBaseWorkspace();
   const { isMobile, setOpenMobile } = useSidebar();
-  const views = useIssueWorkspaceStore((state) => state.views);
-  const activeViewId = useIssueWorkspaceStore(
-    (state) => state.activeViewIdByProject[selectedProject.id] ?? null,
-  );
-  const activateView = useIssueWorkspaceStore((state) => state.activateView);
-  const projectViews = views.filter(({ projectId }) => projectId === selectedProject.id);
+  const [teamOpen, setTeamOpen] = useState(true);
   const badgeById: Partial<Record<BaseNavigationId, string>> = {
     inbox: String(selectAttentionCount(snapshot, selectedProject.id)),
     runs: String(selectActiveRunCount(snapshot, selectedProject.id)),
+  };
+  const closeMobileSidebar = () => {
+    if (isMobile) setOpenMobile(false);
   };
 
   return (
@@ -60,53 +101,69 @@ export function BasePrimaryNavigation() {
 
       <nav className="mt-3" aria-label="Base navigation">
         <NavigationGroup
-          label="Work"
-          items={BASE_NAVIGATION_ITEMS.filter(({ id }) => WORK_NAVIGATION_IDS.has(id))}
-          activeItemId={activeItem?.id ?? null}
+          items={QUICK_NAVIGATION_ITEMS}
+          activeItemId={activeItem?.id === "inbox" ? "inbox" : null}
           badgeById={badgeById}
-          onNavigate={() => {
-            if (isMobile) setOpenMobile(false);
-          }}
+          onNavigate={closeMobileSidebar}
         />
-        <div className="mt-3">
-          <p className="mb-1 px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
-            Project views
-          </p>
-          <SidebarMenu>
-            {projectViews.map((view) => (
-              <SidebarMenuItem key={view.id}>
-                <SidebarMenuButton
-                  className="h-7 gap-2 px-2 text-[12px]"
-                  isActive={
-                    view.id === activeViewId && (pathname === "/issues" || pathname === "/board")
-                  }
-                  onClick={() => {
-                    activateView(selectedProject.id, view.id);
-                    void navigate({ to: view.layout === "board" ? "/board" : "/issues" });
-                    if (isMobile) setOpenMobile(false);
-                  }}
-                  size="sm"
-                  title={`${view.name} · ${view.layout}`}
-                >
-                  <LibraryBigIcon className="size-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{view.name}</span>
-                  <span className="font-mono text-[8px] uppercase text-muted-foreground/60">
-                    {view.layout.slice(0, 1)}
-                  </span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </div>
+
         <NavigationGroup
-          label="Build"
-          className="mt-3"
-          items={BASE_NAVIGATION_ITEMS.filter(({ id }) => !WORK_NAVIGATION_IDS.has(id))}
-          activeItemId={activeItem?.id ?? null}
+          activeItemId={null}
           badgeById={badgeById}
-          onNavigate={() => {
-            if (isMobile) setOpenMobile(false);
-          }}
+          className="mt-5"
+          items={WORKSPACE_NAVIGATION_ITEMS}
+          label="Workspace"
+          onNavigate={closeMobileSidebar}
+        />
+
+        <div className="mt-5">
+          <p className="mb-1 px-2 text-[11px] font-medium text-muted-foreground/65">Your teams</p>
+          <button
+            aria-expanded={teamOpen}
+            className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[12px] font-medium text-foreground/80 outline-hidden transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setTeamOpen((open) => !open)}
+            type="button"
+          >
+            <MegaphoneIcon className="size-3.5 shrink-0 text-info" />
+            <span className="min-w-0 flex-1 truncate">{selectedProject.name}</span>
+            <ChevronDownIcon
+              className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${teamOpen ? "" : "-rotate-90"}`}
+            />
+          </button>
+
+          {teamOpen ? (
+            <SidebarMenu className="mt-0.5 pl-5">
+              {TEAM_NAVIGATION_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = item.id === activeItem?.id;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      className="h-7 gap-2 rounded-lg px-2 text-[13px]"
+                      isActive={isActive}
+                      render={<Link onClick={closeMobileSidebar} to={item.to} />}
+                      size="sm"
+                      title={item.description}
+                    >
+                      <Icon className="size-3.5 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          ) : null}
+        </div>
+
+        <NavigationGroup
+          activeItemId={
+            activeItem && !TEAM_NAVIGATION_IDS.has(activeItem.id) ? activeItem.id : null
+          }
+          badgeById={badgeById}
+          className="mt-5"
+          items={BUILD_NAVIGATION_ITEMS}
+          label="Build"
+          onNavigate={closeMobileSidebar}
         />
       </nav>
     </div>
@@ -125,14 +182,14 @@ function NavigationGroup({
   readonly badgeById: Partial<Record<BaseNavigationId, string>>;
   readonly className?: string;
   readonly items: readonly BaseNavigationItem[];
-  readonly label: string;
+  readonly label?: string;
   readonly onNavigate: () => void;
 }) {
   return (
     <div className={className}>
-      <p className="mb-1 px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
-        {label}
-      </p>
+      {label ? (
+        <p className="mb-1 px-2 text-[11px] font-medium text-muted-foreground/65">{label}</p>
+      ) : null}
       <SidebarMenu>
         {items.map((item) => {
           const Icon = item.icon;
@@ -141,10 +198,10 @@ function NavigationGroup({
           return (
             <SidebarMenuItem key={item.id}>
               <SidebarMenuButton
-                render={<Link to={item.to} onClick={onNavigate} />}
-                size="sm"
-                isActive={isActive}
                 className="h-7 gap-2 px-2 text-[12px]"
+                isActive={isActive}
+                render={<Link onClick={onNavigate} to={item.to} />}
+                size="sm"
                 title={item.description}
               >
                 <Icon className="size-3.5 shrink-0" />
