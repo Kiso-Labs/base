@@ -156,7 +156,11 @@ function WorkflowCanvasNodeComponent({
   const errors = findings.filter(({ severity }) => severity === "error");
   const warnings = findings.length - errors.length;
   const testState = data.testState ?? "idle";
-  const canTest = node.kind === "agent" || node.kind === "test" || node.kind === "hook";
+  const canTest =
+    node.kind === "agent" ||
+    node.kind === "test" ||
+    node.kind === "hook" ||
+    node.kind === "approval";
   const hasToolbar = Boolean(data.onAddAfter || data.onInspect || (canTest && data.onTest));
   const handlesVisibleClass = selected
     ? "!opacity-100"

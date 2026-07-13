@@ -95,6 +95,7 @@ export interface BaseRunSummary {
   readonly workflowId: string;
   readonly workflowVersionId: string;
   readonly workflowVersion: number;
+  readonly workflowName: string;
   readonly issueId: string;
   readonly status: "Queued" | "Running" | "Waiting" | "Failed" | "Succeeded";
   readonly currentStep: string;
@@ -410,6 +411,7 @@ const snapshot: BaseWorkspaceSnapshot = {
       workflowId: "workflow-concurrency-safety",
       workflowVersionId: "workflow-concurrency-safety:v2",
       workflowVersion: 2,
+      workflowName: "Concurrency Safety Check",
       issueId: "issue-bas-102",
       status: "Running",
       currentStep: "Implementation agent",
@@ -422,6 +424,7 @@ const snapshot: BaseWorkspaceSnapshot = {
       workflowId: "workflow-pre-push-review",
       workflowVersionId: "workflow-pre-push-review:v3",
       workflowVersion: 3,
+      workflowName: "Pre-Push AI Review",
       issueId: "issue-bas-105",
       status: "Queued",
       currentStep: "Waiting for capacity",
@@ -434,6 +437,7 @@ const snapshot: BaseWorkspaceSnapshot = {
       workflowId: "workflow-bug-fix",
       workflowVersionId: "workflow-bug-fix:v4",
       workflowVersion: 4,
+      workflowName: "Bug Fix with Regression Check",
       issueId: "issue-bas-104",
       status: "Waiting",
       currentStep: "Human approval",
@@ -446,6 +450,7 @@ const snapshot: BaseWorkspaceSnapshot = {
       workflowId: "workflow-bug-fix",
       workflowVersionId: "workflow-bug-fix:v4",
       workflowVersion: 4,
+      workflowName: "Bug Fix with Regression Check",
       issueId: "issue-rly-2",
       status: "Queued",
       currentStep: "Waiting for capacity",

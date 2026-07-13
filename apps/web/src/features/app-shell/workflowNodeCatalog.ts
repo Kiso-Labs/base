@@ -1,3 +1,4 @@
+import { DEFAULT_WORKFLOW_AGENT_PROFILE_ID } from "./workflowAgentProfiles";
 import type { WorkflowEdge, WorkflowNode, WorkflowPosition } from "./workflowGraph";
 
 export const WORKFLOW_NODE_KINDS = [
@@ -77,7 +78,7 @@ export function createWorkflowNode(
         kind: "agent",
         name: "Agent step",
         config: {
-          agentProfileId: "agent-profile-codex",
+          agentProfileId: DEFAULT_WORKFLOW_AGENT_PROFILE_ID,
           prompt: "Describe the outcome this agent should produce.",
           workingDirectory: ".",
           tools: ["repository"],

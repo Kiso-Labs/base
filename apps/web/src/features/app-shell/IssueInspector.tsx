@@ -1,19 +1,25 @@
 import {
   ActivityIcon,
+  CheckIcon,
   GitBranchIcon,
   ListChecksIcon,
   PlayIcon,
+  PlusIcon,
   SaveIcon,
+  SearchIcon,
   WorkflowIcon,
+  XIcon,
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { Dialog, DialogPopup } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { Sheet, SheetPopup } from "~/components/ui/sheet";
 import { toastManager } from "~/components/ui/toast";
+import { cn } from "~/lib/utils";
 
 import { useBaseWorkspace } from "./BaseWorkspaceContext";
 import { IssueDialogActions, IssueCorePropertyBar, IssueDialogForm } from "./IssueDialogForm";
@@ -45,16 +51,19 @@ export function IssueInspector() {
   };
 
   return (
-    <Dialog
+    <Sheet
       onOpenChange={(open) => {
         if (!open) close();
       }}
       open={Boolean(issue)}
     >
-      <DialogPopup className="h-[min(46rem,calc(100dvh-2rem))] max-w-5xl overflow-hidden p-0">
+      <SheetPopup
+        className="max-w-[46rem] overflow-hidden border-l-border/70 bg-background/98 shadow-2xl"
+        side="right"
+      >
         {issue ? <IssueInspectorPanel issue={issue} key={issue.id} /> : null}
-      </DialogPopup>
-    </Dialog>
+      </SheetPopup>
+    </Sheet>
   );
 }
 
@@ -73,14 +82,17 @@ function IssueInspectorPanel({ issue }: { readonly issue: BaseIssueSummary }) {
   const [cycle, setCycle] = useState(issue.cycle);
   const [assignee, setAssignee] = useState(issue.assignee);
   const [branch, setBranch] = useState(issue.branch);
-  const [showMoreFields, setShowMoreFields] = useState(false);
+  const projectIssues = snapshot.issues.filter(
+    (candidate) => candidate.projectId === issue.projectId && candidate.id !== issue.id,
+  );
+  const eligibleDependencyIds = new Set(projectIssues.map(({ id }) => id));
+  const [dependencyIds, setDependencyIds] = useState(
+    issue.dependencies.filter((dependencyId) => eligibleDependencyIds.has(dependencyId)),
+  );
+  const [showMoreFields, setShowMoreFields] = useState(true);
   const latestRun = snapshot.runs.find(
     (run) => run.id === issue.latestRunId && run.projectId === selectedProject.id,
   );
-  const dependencies = issue.dependencies.flatMap((dependencyId) => {
-    const dependency = snapshot.issues.find(({ id }) => id === dependencyId);
-    return dependency ? [dependency] : [];
-  });
   const workflowOptions = [
     { label: "No workflow", value: "none" },
     ...snapshot.workflows.map((workflow) => ({ label: workflow.name, value: workflow.id })),
@@ -97,6 +109,7 @@ function IssueInspectorPanel({ issue }: { readonly issue: BaseIssueSummary }) {
       cycle,
       assignee,
       branch,
+      dependencies: dependencyIds,
     });
     toastManager.add(
       result.ok
@@ -300,17 +313,11 @@ function IssueInspectorPanel({ issue }: { readonly issue: BaseIssueSummary }) {
               </InspectorSection>
 
               <InspectorSection icon={<ListChecksIcon />} title="Dependencies">
-                {dependencies.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {dependencies.map((dependency) => (
-                      <Badge key={dependency.id} size="sm" variant="outline">
-                        {dependency.identifier} · {dependency.status}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No blocking dependencies.</p>
-                )}
+                <IssueDependencyPicker
+                  issues={projectIssues}
+                  onChange={setDependencyIds}
+                  value={dependencyIds}
+                />
               </InspectorSection>
 
               <InspectorSection icon={<ActivityIcon />} title="Activity">
@@ -365,6 +372,154 @@ function IssueTextProperty({
       <span className="text-xs font-medium text-foreground">{label}</span>
       <Input onChange={(event) => onChange(event.currentTarget.value)} value={value} />
     </label>
+  );
+}
+
+function IssueDependencyPicker({
+  issues,
+  onChange,
+  value,
+}: {
+  readonly issues: readonly BaseIssueSummary[];
+  readonly onChange: (issueIds: string[]) => void;
+  readonly value: readonly string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const selectedIds = new Set(value);
+  const selectedIssues = value.flatMap((issueId) => {
+    const dependency = issues.find(({ id }) => id === issueId);
+    return dependency ? [dependency] : [];
+  });
+  const normalizedSearch = search.trim().toLowerCase();
+  const matchingIssues = issues.filter(
+    (candidate) =>
+      !normalizedSearch ||
+      candidate.identifier.toLowerCase().includes(normalizedSearch) ||
+      candidate.title.toLowerCase().includes(normalizedSearch),
+  );
+
+  const toggleDependency = (issueId: string) => {
+    onChange(
+      selectedIds.has(issueId)
+        ? value.filter((candidate) => candidate !== issueId)
+        : [...value, issueId],
+    );
+  };
+
+  return (
+    <div className="space-y-2.5">
+      {selectedIssues.length > 0 ? (
+        <div className="space-y-1.5">
+          {selectedIssues.map((dependency) => (
+            <div
+              className="group flex items-center gap-2 rounded-lg border border-border/60 bg-background/70 px-2.5 py-2"
+              key={dependency.id}
+            >
+              <span className="font-mono text-[10px] font-semibold text-muted-foreground">
+                {dependency.identifier}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/85">
+                {dependency.title}
+              </span>
+              <Badge className="shrink-0" size="sm" variant="outline">
+                {dependency.status}
+              </Badge>
+              <Button
+                aria-label={`Remove dependency ${dependency.identifier}`}
+                className="size-6 shrink-0 text-muted-foreground opacity-70 group-hover:opacity-100"
+                onClick={() => toggleDependency(dependency.id)}
+                size="icon-xs"
+                type="button"
+                variant="ghost"
+              >
+                <XIcon />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">No blocking dependencies.</p>
+      )}
+
+      <Popover
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) setSearch("");
+        }}
+        open={open}
+      >
+        <PopoverTrigger render={<Button size="xs" type="button" variant="outline" />}>
+          <PlusIcon />
+          Add project issue
+        </PopoverTrigger>
+        <PopoverPopup align="start" className="w-[min(26rem,calc(100vw-4rem))] p-0" sideOffset={6}>
+          <div className="border-b border-border/60 p-2.5">
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="Search project issues"
+                autoFocus
+                className="h-8 pl-8 text-xs"
+                onChange={(event) => setSearch(event.currentTarget.value)}
+                placeholder="Search this project…"
+                value={search}
+              />
+            </div>
+          </div>
+          <div
+            aria-label="Project issue dependencies"
+            aria-multiselectable="true"
+            className="max-h-64 overflow-y-auto p-1.5"
+            role="listbox"
+          >
+            {matchingIssues.map((candidate) => {
+              const selected = selectedIds.has(candidate.id);
+              return (
+                <button
+                  aria-selected={selected}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left outline-none hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
+                  key={candidate.id}
+                  onClick={() => toggleDependency(candidate.id)}
+                  role="option"
+                  type="button"
+                >
+                  <span
+                    className={cn(
+                      "flex size-4 shrink-0 items-center justify-center rounded border",
+                      selected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background",
+                    )}
+                  >
+                    {selected ? <CheckIcon className="size-3" /> : null}
+                  </span>
+                  <span className="w-16 shrink-0 font-mono text-[10px] font-semibold text-muted-foreground">
+                    {candidate.identifier}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-foreground/85">
+                    {candidate.title}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                    {candidate.status}
+                  </span>
+                </button>
+              );
+            })}
+            {matchingIssues.length === 0 ? (
+              <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+                {issues.length === 0
+                  ? "There are no other issues in this project."
+                  : "No project issues match that search."}
+              </div>
+            ) : null}
+          </div>
+        </PopoverPopup>
+      </Popover>
+      <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+        Only issues from this project can be selected.
+      </p>
+    </div>
   );
 }
 

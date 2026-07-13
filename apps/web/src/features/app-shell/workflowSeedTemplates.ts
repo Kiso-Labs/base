@@ -7,6 +7,7 @@ import {
   type WorkflowTemplate,
   type WorkflowTriggerConfig,
 } from "./workflowGraph";
+import { WORKFLOW_AGENT_PROFILE_IDS } from "./workflowAgentProfiles";
 import { baseWorkspaceRepository, type BaseWorkflowSummary } from "./workspaceRepository";
 
 interface WorkflowSeedBlueprint {
@@ -168,7 +169,7 @@ function createSeedGraph(templateId: string, blueprint: WorkflowSeedBlueprint): 
       position: { x: 340, y: 180 },
       disabled: false,
       config: {
-        agentProfileId: "agent-profile-planning",
+        agentProfileId: WORKFLOW_AGENT_PROFILE_IDS.planning,
         prompt: blueprint.agentPrompt,
         workingDirectory: ".",
         tools: ["repository", "terminal", "issues"],
@@ -238,7 +239,7 @@ function createSeedGraph(templateId: string, blueprint: WorkflowSeedBlueprint): 
       position: { x: 1_840, y: 40 },
       disabled: false,
       config: {
-        agentProfileId: "agent-profile-implementation",
+        agentProfileId: WORKFLOW_AGENT_PROFILE_IDS.implementation,
         prompt: blueprint.finalizePrompt,
         workingDirectory: ".",
         tools: ["repository", "terminal"],

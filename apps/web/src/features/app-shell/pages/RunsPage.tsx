@@ -80,22 +80,24 @@ function RunRow({
         )}
       </TableCell>
       <TableCell className="min-w-52 max-w-64 whitespace-normal">
-        {workflow ? (
-          <div className="min-w-0">
+        <div className="min-w-0">
+          {workflow ? (
             <Button
               render={<a href="/workflows" />}
               className="h-auto max-w-full justify-start truncate p-0 text-xs font-medium"
               variant="link"
             >
-              {workflow.name}
+              {run.workflowName || workflow.name}
             </Button>
-            <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/65">
-              immutable v{run.workflowVersion}
+          ) : (
+            <p className="truncate text-xs font-medium text-foreground/85">
+              {run.workflowName || run.workflowId}
             </p>
-          </div>
-        ) : (
-          <span className="text-[11px] text-muted-foreground">Unknown workflow</span>
-        )}
+          )}
+          <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/65">
+            immutable v{run.workflowVersion}
+          </p>
+        </div>
       </TableCell>
       <TableCell>
         <RunStatusBadge status={run.status} />

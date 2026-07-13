@@ -62,8 +62,12 @@ export function BaseWorkspaceProvider({
   const repositorySnapshot = repository.read();
   const issues = useIssueWorkspaceStore((state) => state.issues);
   const runs = useIssueWorkspaceStore((state) => state.runs);
+  const issueViews = useIssueWorkspaceStore((state) => state.views);
   const syncWorkflowCatalog = useIssueWorkspaceStore((state) => state.syncWorkflowCatalog);
   const workflowTemplates = useWorkflowWorkspaceStore((state) => state.templates);
+  const reconcileTriggerBindings = useWorkflowWorkspaceStore(
+    (state) => state.reconcileTriggerBindings,
+  );
   const workflows = useMemo(() => deriveWorkflowSummaries(workflowTemplates), [workflowTemplates]);
   const clearIssueSelection = useIssueWorkspaceStore((state) => state.clearIssueSelection);
   const selectIssue = useIssueWorkspaceStore((state) => state.selectIssue);
@@ -74,12 +78,23 @@ export function BaseWorkspaceProvider({
 
   useEffect(() => {
     syncWorkflowCatalog(
-      workflowTemplates.map((template) => ({
-        id: template.id,
-        version: template.versions.at(-1)?.version ?? null,
-      })),
+      workflowTemplates.map((template) => {
+        const latestVersion = template.versions.at(-1);
+        return {
+          id: template.id,
+          version: latestVersion?.version ?? null,
+          executable: template.archivedAt === null,
+          name: latestVersion?.content.name ?? template.draft.content.name,
+        };
+      }),
     );
   }, [syncWorkflowCatalog, workflowTemplates]);
+  useEffect(() => {
+    reconcileTriggerBindings({
+      projectIds: repositorySnapshot.projects.map(({ id }) => id),
+      views: issueViews.map(({ id, layout, projectId }) => ({ id, layout, projectId })),
+    });
+  }, [issueViews, reconcileTriggerBindings, repositorySnapshot.projects, workflowTemplates]);
   const [selectedProjectId, setSelectedProjectId] = useState(() =>
     readInitialProjectId(repository),
   );

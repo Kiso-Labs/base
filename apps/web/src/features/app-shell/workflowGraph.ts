@@ -131,6 +131,7 @@ export type WorkflowValidationCode =
   | "dangling-edge"
   | "self-edge"
   | "invalid-edge-outcome"
+  | "edge-output-duplicate"
   | "graph-cycle"
   | "unreachable-node"
   | "trigger-config-invalid"
@@ -163,7 +164,7 @@ export interface WorkflowValidationReport {
   readonly canPublish: boolean;
 }
 
-export type WorkflowCommand =
+export type WorkflowAtomicCommand =
   | { readonly type: "node.add"; readonly node: WorkflowNode }
   | { readonly type: "node.update"; readonly node: WorkflowNode }
   | {
@@ -173,6 +174,10 @@ export type WorkflowCommand =
   | { readonly type: "nodes.remove"; readonly nodeIds: readonly string[] }
   | { readonly type: "edge.connect"; readonly edge: WorkflowEdge }
   | { readonly type: "edges.remove"; readonly edgeIds: readonly string[] };
+
+export type WorkflowCommand =
+  | WorkflowAtomicCommand
+  | { readonly type: "batch"; readonly commands: readonly WorkflowAtomicCommand[] };
 
 export type WorkflowMutationResult =
   | {
@@ -401,6 +406,7 @@ export function validateWorkflowDraft(
   const { nodes, edges } = draft.content.graph;
   const diagnostics: WorkflowDiagnostic[] = [];
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const connectedOutputs = new Set<string>();
 
   collectDuplicateIdDiagnostics(nodes, "node", diagnostics);
   collectDuplicateIdDiagnostics(edges, "edge", diagnostics);
@@ -437,6 +443,18 @@ export function validateWorkflowDraft(
         nodeId: source.id,
         edgeId: edge.id,
       });
+    }
+    const outputKey = `${source.id}:${workflowEdgeOutputKey(edge)}`;
+    if (connectedOutputs.has(outputKey)) {
+      diagnostics.push({
+        severity: "error",
+        code: "edge-output-duplicate",
+        message: `The ${describeWorkflowEdgeOutput(edge)} output can have only one connection.`,
+        nodeId: source.id,
+        edgeId: edge.id,
+      });
+    } else {
+      connectedOutputs.add(outputKey);
     }
     if (target?.kind === "trigger") {
       diagnostics.push({
@@ -608,11 +626,14 @@ function collectNodeConfigurationDiagnostics(
       return;
     case "branch": {
       const caseIds = new Set<string>();
+      const caseLabels = new Set<string>();
       const invalidCases =
         node.config.cases.length === 0 ||
         node.config.cases.some((branchCase) => {
-          const duplicate = caseIds.has(branchCase.id);
+          const normalizedLabel = branchCase.label.trim().toLocaleLowerCase();
+          const duplicate = caseIds.has(branchCase.id) || caseLabels.has(normalizedLabel);
           caseIds.add(branchCase.id);
+          caseLabels.add(normalizedLabel);
           return (
             duplicate ||
             !branchCase.id.trim() ||
@@ -705,6 +726,22 @@ export function applyWorkflowCommand(
   draft: WorkflowDraft,
   command: WorkflowCommand,
 ): WorkflowMutationResult {
+  if (command.type === "batch") {
+    let current = draft;
+    let changed = false;
+    for (const nestedCommand of command.commands) {
+      const result = applyWorkflowCommand(current, nestedCommand);
+      if (!result.accepted) return rejectMutation(draft, result.reason);
+      current = result.draft;
+      changed ||= result.changed;
+    }
+    if (!changed) return unchangedMutation(draft);
+    return {
+      accepted: true,
+      changed: true,
+      draft: { ...current, revision: draft.revision + 1 },
+    };
+  }
   const { graph } = draft.content;
   switch (command.type) {
     case "node.add": {
@@ -779,7 +816,8 @@ export function applyWorkflowCommand(
       if (!source) {
         return rejectMutation(draft, `Source node ${edge.sourceNodeId} does not exist.`);
       }
-      if (!graph.nodes.some(({ id }) => id === edge.targetNodeId)) {
+      const target = graph.nodes.find(({ id }) => id === edge.targetNodeId);
+      if (!target) {
         return rejectMutation(draft, `Target node ${edge.targetNodeId} does not exist.`);
       }
       if (edge.sourceNodeId === edge.targetNodeId) {
@@ -788,7 +826,27 @@ export function applyWorkflowCommand(
       if (!isLegalOutcome(source, edge)) {
         return rejectMutation(draft, `${edge.kind} is not a valid outcome for ${source.kind}.`);
       }
-      return acceptGraphMutation(draft, { ...graph, edges: [...graph.edges, edge] });
+      if (target.kind === "trigger") {
+        return rejectMutation(draft, "Trigger nodes cannot have incoming edges.");
+      }
+      const outputKey = workflowEdgeOutputKey(edge);
+      if (
+        graph.edges.some(
+          (candidate) =>
+            candidate.sourceNodeId === edge.sourceNodeId &&
+            workflowEdgeOutputKey(candidate) === outputKey,
+        )
+      ) {
+        return rejectMutation(
+          draft,
+          `The ${describeWorkflowEdgeOutput(edge)} output is already connected.`,
+        );
+      }
+      const nextGraph = { ...graph, edges: [...graph.edges, edge] };
+      if (containsCycle(nextGraph.nodes, createAdjacency(nextGraph.nodes, nextGraph.edges))) {
+        return rejectMutation(draft, "Workflow connections cannot create a cycle.");
+      }
+      return acceptGraphMutation(draft, nextGraph);
     }
     case "edges.remove": {
       const edgeIds = new Set(command.edgeIds);
@@ -819,6 +877,18 @@ function isLegalOutcome(source: WorkflowNode, edge: WorkflowEdge): boolean {
   if (source.kind === "approval") return edge.kind === "approval";
   if (edge.kind !== "branch") return false;
   return edge.caseId === null || source.config.cases.some(({ id }) => id === edge.caseId);
+}
+
+function workflowEdgeOutputKey(edge: WorkflowEdge): string {
+  if (edge.kind === "approval") return `${edge.kind}:${edge.outcome}`;
+  if (edge.kind === "branch") return `${edge.kind}:${edge.caseId ?? "default"}`;
+  return edge.kind;
+}
+
+function describeWorkflowEdgeOutput(edge: WorkflowEdge): string {
+  if (edge.kind === "approval") return edge.outcome;
+  if (edge.kind === "branch") return edge.caseId ?? "default";
+  return edge.kind;
 }
 
 function acceptGraphMutation(draft: WorkflowDraft, graph: WorkflowGraph): WorkflowMutationResult {

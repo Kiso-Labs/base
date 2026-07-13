@@ -20,9 +20,13 @@ import {
   type WorkflowTriggerConfig,
   type WorkflowValidationReport,
 } from "./workflowGraph";
+import { WORKFLOW_AGENT_PROFILE_ID_LIST } from "./workflowAgentProfiles";
 import { BASE_WORKFLOW_SEED_TEMPLATES, WORKFLOW_SEED_SUCCESS_RATES } from "./workflowSeedTemplates";
 import type { BaseWorkflowSummary } from "./workspaceRepository";
 
+const WORKFLOW_VALIDATION_REFERENCES = {
+  agentProfileIds: WORKFLOW_AGENT_PROFILE_ID_LIST,
+} as const;
 const DEFAULT_WORKFLOW_VIEWPORT: WorkflowViewport = { x: 0, y: 0, zoom: 0.82 };
 const IDLE_WORKFLOW_TEST_STATE: WorkflowTestState = {
   status: "idle",
@@ -38,7 +42,7 @@ export interface WorkflowWorkspaceStore {
   readonly viewportByTemplateId: Readonly<Record<string, WorkflowViewport>>;
   readonly historyByTemplateId: Readonly<Record<string, WorkflowHistory>>;
   readonly validationByTemplateId: Readonly<Record<string, WorkflowValidationReport>>;
-  readonly testStateByNodeId: Readonly<Record<string, WorkflowTestState>>;
+  readonly testStateByNodeKey: Readonly<Record<string, WorkflowTestState>>;
   readonly fullTestStateByTemplateId: Readonly<Record<string, WorkflowTestState>>;
   readonly triggerBindings: Readonly<Record<string, WorkflowTriggerBinding>>;
   readonly executeCommand: (
@@ -59,7 +63,13 @@ export interface WorkflowWorkspaceStore {
   readonly publish: (templateId: string) => WorkflowWorkspacePublishResult;
   readonly testNode: (nodeId: string) => WorkflowTestState | null;
   readonly testWorkflow: (templateId: string) => WorkflowTestState | null;
-  readonly setTriggerBinding: (binding: WorkflowTriggerBinding) => WorkflowWorkspaceMutationResult;
+  readonly setTriggerBinding: (
+    binding: WorkflowTriggerBinding,
+    references: WorkflowTriggerBindingReferences,
+  ) => WorkflowWorkspaceMutationResult;
+  readonly reconcileTriggerBindings: (
+    references: WorkflowTriggerBindingReferences,
+  ) => WorkflowWorkspaceMutationResult;
   readonly undo: (templateId: string) => WorkflowWorkspaceMutationResult;
   readonly redo: (templateId: string) => WorkflowWorkspaceMutationResult;
 }
@@ -71,7 +81,7 @@ export interface WorkflowViewport {
 }
 
 export interface WorkflowTestState {
-  readonly status: "idle" | "running" | "passed" | "failed";
+  readonly status: "idle" | "running" | "waiting-for-approval" | "passed" | "failed";
   readonly message: string;
   readonly durationMs: number | null;
   readonly updatedAt: string | null;
@@ -82,6 +92,15 @@ export interface WorkflowTriggerBinding {
   readonly templateId: string;
   readonly nodeId: string;
   readonly viewId: string | null;
+}
+
+export interface WorkflowTriggerBindingReferences {
+  readonly projectIds: readonly string[];
+  readonly views: readonly {
+    readonly id: string;
+    readonly projectId: string;
+    readonly layout: "list" | "board";
+  }[];
 }
 
 export interface CreateWorkflowTemplateInput {
@@ -95,6 +114,8 @@ export interface WorkflowWorkspaceStoreOptions {
   readonly now?: () => string;
   readonly storage?: StateStorage;
   readonly storageKey?: string;
+  readonly bindingReferences?: WorkflowTriggerBindingReferences;
+  readonly schedule?: (callback: () => void, delayMs: number) => void;
 }
 
 export type WorkflowWorkspaceMutationResult =
@@ -113,6 +134,9 @@ export type WorkflowWorkspacePublishResult =
 export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOptions = {}) {
   const templates = structuredClone(options.initialTemplates ?? BASE_WORKFLOW_SEED_TEMPLATES);
   const now = options.now ?? (() => new Date().toISOString());
+  const schedule =
+    options.schedule ??
+    ((callback: () => void, delayMs: number) => void setTimeout(callback, delayMs));
   return create<WorkflowWorkspaceStore>()(
     persist(
       (set, get) => ({
@@ -122,7 +146,7 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
         viewportByTemplateId: deriveViewportByTemplateId(templates),
         historyByTemplateId: deriveHistoryByTemplateId(templates),
         validationByTemplateId: deriveValidationByTemplateId(templates),
-        testStateByNodeId: deriveTestStateByNodeId(templates),
+        testStateByNodeKey: deriveTestStateByNodeKey(templates),
         fullTestStateByTemplateId: deriveFullTestStateByTemplateId(templates),
         triggerBindings: {},
         executeCommand: (templateId, command) => {
@@ -136,7 +160,16 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
             return { ok: false, changed: false, reason: result.reason };
           }
           if (!result.changed) return { ok: true, changed: false };
-          commitHistory(set, state, template, result.history);
+          commitHistory(
+            set,
+            state,
+            template,
+            result.history,
+            workflowContentAffectsExecution(
+              history.present.content,
+              result.history.present.content,
+            ),
+          );
           return { ok: true, changed: true };
         },
         updateMetadata: (templateId, input) => {
@@ -165,7 +198,7 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
             },
             future: [],
           };
-          commitHistory(set, state, template, nextHistory);
+          commitHistory(set, state, template, nextHistory, false);
           return { ok: true, changed: true };
         },
         createTemplate: (input) => {
@@ -216,11 +249,11 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
             },
             validationByTemplateId: {
               ...state.validationByTemplateId,
-              [id]: validateWorkflowDraft(draft),
+              [id]: validateWorkflowDraft(draft, WORKFLOW_VALIDATION_REFERENCES),
             },
-            testStateByNodeId: {
-              ...state.testStateByNodeId,
-              [triggerId]: IDLE_WORKFLOW_TEST_STATE,
+            testStateByNodeKey: {
+              ...state.testStateByNodeKey,
+              [workflowNodeTestKey(id, triggerId)]: IDLE_WORKFLOW_TEST_STATE,
             },
             fullTestStateByTemplateId: {
               ...state.fullTestStateByTemplateId,
@@ -298,6 +331,7 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
           const result = publishWorkflow(template, {
             publishedAt: now(),
             versionId: `${template.id}:v${nextVersion}`,
+            references: WORKFLOW_VALIDATION_REFERENCES,
           });
           if (result.ok) {
             set({
@@ -330,12 +364,13 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
                 draft.content.graph.nodes.some(({ id }) => id === nodeId),
               );
           if (!template) return null;
-          const validation = validateWorkflowDraft(template.draft);
+          const validation = validateWorkflowDraft(template.draft, WORKFLOW_VALIDATION_REFERENCES);
           const diagnostics = validation.diagnostics.filter(
             (diagnostic) => diagnostic.nodeId === nodeId && diagnostic.severity === "error",
           );
           const nodeIndex = template.draft.content.graph.nodes.findIndex(({ id }) => id === nodeId);
-          const testState: WorkflowTestState = diagnostics.length
+          const node = template.draft.content.graph.nodes[nodeIndex]!;
+          const completionState: WorkflowTestState = diagnostics.length
             ? {
                 status: "failed",
                 message: diagnostics[0]!.message,
@@ -348,24 +383,57 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
                 durationMs: 420 + nodeIndex * 37,
                 updatedAt: now(),
               };
+          const testState: WorkflowTestState =
+            node.kind === "approval" && diagnostics.length === 0
+              ? {
+                  status: "waiting-for-approval",
+                  message: `Waiting for ${node.config.approverGroup} approval.`,
+                  durationMs: null,
+                  updatedAt: now(),
+                }
+              : {
+                  status: "running",
+                  message: "Step test is running.",
+                  durationMs: null,
+                  updatedAt: now(),
+                };
+          const testKey = workflowNodeTestKey(template.id, nodeId);
           set({
-            testStateByNodeId: { ...state.testStateByNodeId, [nodeId]: testState },
+            testStateByNodeKey: {
+              ...state.testStateByNodeKey,
+              [testKey]: testState,
+            },
             validationByTemplateId: {
               ...state.validationByTemplateId,
               [template.id]: validation,
             },
           });
+          if (testState.status === "running") {
+            schedule(() => {
+              set((current) => {
+                if (current.testStateByNodeKey[testKey]?.status !== "running") {
+                  return current;
+                }
+                return {
+                  testStateByNodeKey: {
+                    ...current.testStateByNodeKey,
+                    [testKey]: completionState,
+                  },
+                };
+              });
+            }, 520);
+          }
           return testState;
         },
         testWorkflow: (templateId) => {
           const state = get();
           const template = state.templates.find(({ id }) => id === templateId);
           if (!template) return null;
-          const validation = validateWorkflowDraft(template.draft);
+          const validation = validateWorkflowDraft(template.draft, WORKFLOW_VALIDATION_REFERENCES);
           const blockingErrors = validation.diagnostics.filter(
             ({ severity }) => severity === "error",
           );
-          const testState: WorkflowTestState = blockingErrors.length
+          const completionState: WorkflowTestState = blockingErrors.length
             ? {
                 status: "failed",
                 message: `${blockingErrors.length} blocking validation error${blockingErrors.length === 1 ? "" : "s"}`,
@@ -378,6 +446,12 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
                 durationMs: 1_100 + template.draft.content.graph.nodes.length * 83,
                 updatedAt: now(),
               };
+          const testState: WorkflowTestState = {
+            status: "running",
+            message: "Workflow dry run is running.",
+            durationMs: null,
+            updatedAt: now(),
+          };
           set({
             fullTestStateByTemplateId: {
               ...state.fullTestStateByTemplateId,
@@ -388,26 +462,32 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
               [template.id]: validation,
             },
           });
+          schedule(() => {
+            set((current) => {
+              if (current.fullTestStateByTemplateId[template.id]?.status !== "running") {
+                return current;
+              }
+              return {
+                fullTestStateByTemplateId: {
+                  ...current.fullTestStateByTemplateId,
+                  [template.id]: completionState,
+                },
+              };
+            });
+          }, 760);
           return testState;
         },
-        setTriggerBinding: (binding) => {
+        setTriggerBinding: (binding, references) => {
           const state = get();
-          const template = state.templates.find(({ id }) => id === binding.templateId);
-          const node = template?.draft.content.graph.nodes.find(({ id }) => id === binding.nodeId);
-          if (!template || node?.kind !== "trigger") {
-            return {
-              ok: false,
-              changed: false,
-              reason: "Project view bindings require an existing trigger node.",
-            };
-          }
           const normalizedViewId = binding.viewId?.trim() || null;
+          const nextBinding = { ...binding, viewId: normalizedViewId };
+          const reason = validateTriggerBinding(nextBinding, state.templates, references);
+          if (reason) return { ok: false, changed: false, reason };
           const key = workflowTriggerBindingKey(
             binding.projectId,
             binding.templateId,
             binding.nodeId,
           );
-          const nextBinding = { ...binding, viewId: normalizedViewId };
           const current = state.triggerBindings[key];
           if (
             current?.projectId === nextBinding.projectId &&
@@ -420,6 +500,19 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
           set({ triggerBindings: { ...state.triggerBindings, [key]: nextBinding } });
           return { ok: true, changed: true };
         },
+        reconcileTriggerBindings: (references) => {
+          const state = get();
+          const triggerBindings = sanitizeWorkflowTriggerBindings(
+            state.triggerBindings,
+            state.templates,
+            references,
+          );
+          if (Object.keys(triggerBindings).length === Object.keys(state.triggerBindings).length) {
+            return { ok: true, changed: false };
+          }
+          set({ triggerBindings });
+          return { ok: true, changed: true };
+        },
         undo: (templateId) => {
           const state = get();
           const template = state.templates.find(({ id }) => id === templateId);
@@ -428,7 +521,17 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
             state.historyByTemplateId[templateId] ?? createWorkflowHistory(template.draft),
           );
           if (!result.changed) return { ok: true, changed: false };
-          commitHistory(set, state, template, result.history);
+          commitHistory(
+            set,
+            state,
+            template,
+            result.history,
+            workflowContentAffectsExecution(
+              (state.historyByTemplateId[templateId] ?? createWorkflowHistory(template.draft))
+                .present.content,
+              result.history.present.content,
+            ),
+          );
           return { ok: true, changed: true };
         },
         redo: (templateId) => {
@@ -439,13 +542,23 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
             state.historyByTemplateId[templateId] ?? createWorkflowHistory(template.draft),
           );
           if (!result.changed) return { ok: true, changed: false };
-          commitHistory(set, state, template, result.history);
+          commitHistory(
+            set,
+            state,
+            template,
+            result.history,
+            workflowContentAffectsExecution(
+              (state.historyByTemplateId[templateId] ?? createWorkflowHistory(template.draft))
+                .present.content,
+              result.history.present.content,
+            ),
+          );
           return { ok: true, changed: true };
         },
       }),
       {
         name: options.storageKey ?? "base:workflow-workspace:v2",
-        version: 2,
+        version: 3,
         storage: createJSONStorage(
           () =>
             options.storage ??
@@ -457,10 +570,15 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
           viewportByTemplateId: state.viewportByTemplateId,
           triggerBindings: state.triggerBindings,
         }),
+        migrate: (persistedState) =>
+          isRecord(persistedState)
+            ? { ...persistedState, triggerBindings: persistedState.triggerBindings ?? {} }
+            : {},
         merge: (persistedState, currentState) =>
           hydrateWorkflowWorkspaceState(
             currentState,
             persistedState as Partial<WorkflowWorkspaceStore>,
+            options.bindingReferences,
           ),
       },
     ),
@@ -475,6 +593,10 @@ export function workflowTriggerBindingKey(
   nodeId: string,
 ): string {
   return `${projectId}:${templateId}:${nodeId}`;
+}
+
+export function workflowNodeTestKey(templateId: string, nodeId: string): string {
+  return JSON.stringify([templateId, nodeId]);
 }
 
 export function deriveWorkflowSummaries(
@@ -508,13 +630,17 @@ function deriveValidationByTemplateId(
   templates: readonly WorkflowTemplate[],
 ): Readonly<Record<string, WorkflowValidationReport>> {
   return Object.fromEntries(
-    templates.map((template) => [template.id, validateWorkflowDraft(template.draft)]),
+    templates.map((template) => [
+      template.id,
+      validateWorkflowDraft(template.draft, WORKFLOW_VALIDATION_REFERENCES),
+    ]),
   );
 }
 
 function hydrateWorkflowWorkspaceState(
   currentState: WorkflowWorkspaceStore,
   persistedState: Partial<WorkflowWorkspaceStore>,
+  bindingReferences?: WorkflowTriggerBindingReferences,
 ): WorkflowWorkspaceStore {
   const templates = isWorkflowTemplateArray(persistedState.templates)
     ? persistedState.templates
@@ -538,12 +664,71 @@ function hydrateWorkflowWorkspaceState(
     viewportByTemplateId,
     historyByTemplateId: deriveHistoryByTemplateId(templates),
     validationByTemplateId: deriveValidationByTemplateId(templates),
-    testStateByNodeId: deriveTestStateByNodeId(templates),
+    testStateByNodeKey: deriveTestStateByNodeKey(templates),
     fullTestStateByTemplateId: deriveFullTestStateByTemplateId(templates),
-    triggerBindings: isWorkflowTriggerBindingRecord(persistedState.triggerBindings)
-      ? persistedState.triggerBindings
-      : {},
+    triggerBindings: sanitizeWorkflowTriggerBindings(
+      persistedState.triggerBindings,
+      templates,
+      bindingReferences,
+    ),
   };
+}
+
+function sanitizeWorkflowTriggerBindings(
+  value: unknown,
+  templates: readonly WorkflowTemplate[],
+  references?: WorkflowTriggerBindingReferences,
+): Readonly<Record<string, WorkflowTriggerBinding>> {
+  if (!isWorkflowTriggerBindingRecord(value)) return {};
+  return Object.fromEntries(
+    Object.values(value)
+      .filter((binding) => {
+        const structuralReason = validateTriggerBindingStructure(binding, templates);
+        return (
+          !structuralReason &&
+          (!references || !validateTriggerBinding(binding, templates, references))
+        );
+      })
+      .map((binding) => [
+        workflowTriggerBindingKey(binding.projectId, binding.templateId, binding.nodeId),
+        binding,
+      ]),
+  );
+}
+
+function validateTriggerBinding(
+  binding: WorkflowTriggerBinding,
+  templates: readonly WorkflowTemplate[],
+  references: WorkflowTriggerBindingReferences,
+): string | null {
+  const structuralReason = validateTriggerBindingStructure(binding, templates);
+  if (structuralReason) return structuralReason;
+  if (!references.projectIds.includes(binding.projectId)) {
+    return "Project view bindings require an existing project.";
+  }
+  if (binding.viewId === null) return null;
+  const view = references.views.find(({ id }) => id === binding.viewId);
+  if (!view) return "The selected Kanban board view no longer exists.";
+  if (view.projectId !== binding.projectId) {
+    return "The selected Kanban board view belongs to another project.";
+  }
+  if (view.layout !== "board") return "Workflow triggers can bind only to Kanban board views.";
+  return null;
+}
+
+function validateTriggerBindingStructure(
+  binding: WorkflowTriggerBinding,
+  templates: readonly WorkflowTemplate[],
+): string | null {
+  const template = templates.find(({ id }) => id === binding.templateId);
+  const node = template?.draft.content.graph.nodes.find(({ id }) => id === binding.nodeId);
+  if (!template || node?.kind !== "trigger") {
+    return "Project view bindings require an existing trigger node.";
+  }
+  if (node.config.event !== "issue-status" && node.config.event !== "issue-queued") {
+    return "Only issue status and issue queued triggers can bind to a Kanban board view.";
+  }
+  return null;
 }
 
 function isWorkflowTriggerBindingRecord(
@@ -569,20 +754,183 @@ function isWorkflowTriggerBindingRecord(
 }
 
 function isWorkflowTemplateArray(value: unknown): value is readonly WorkflowTemplate[] {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every(
-      (template) =>
-        typeof template === "object" &&
-        template !== null &&
-        "id" in template &&
-        typeof template.id === "string" &&
-        "draft" in template &&
-        typeof template.draft === "object" &&
-        template.draft !== null,
-    )
+  return Array.isArray(value) && value.length > 0 && value.every(isWorkflowTemplate);
+}
+
+function isWorkflowTemplate(value: unknown): value is WorkflowTemplate {
+  if (!isRecord(value)) return false;
+  if (
+    typeof value.id !== "string" ||
+    typeof value.workspaceId !== "string" ||
+    (value.archivedAt !== null && typeof value.archivedAt !== "string") ||
+    !isWorkflowDraft(value.draft) ||
+    value.draft.templateId !== value.id ||
+    !Array.isArray(value.versions)
+  ) {
+    return false;
+  }
+  return value.versions.every(
+    (version) =>
+      isRecord(version) &&
+      typeof version.id === "string" &&
+      version.templateId === value.id &&
+      Number.isInteger(version.version) &&
+      (version.version as number) > 0 &&
+      typeof version.publishedAt === "string" &&
+      typeof version.checksum === "string" &&
+      isWorkflowDraftContent(version.content),
   );
+}
+
+function isWorkflowDraft(value: unknown): value is WorkflowTemplate["draft"] {
+  return (
+    isRecord(value) &&
+    typeof value.templateId === "string" &&
+    Number.isInteger(value.revision) &&
+    (value.revision as number) >= 0 &&
+    isWorkflowDraftContent(value.content)
+  );
+}
+
+function isWorkflowDraftContent(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    typeof value.description === "string" &&
+    isRecord(value.graph) &&
+    Array.isArray(value.graph.nodes) &&
+    value.graph.nodes.every(isWorkflowNode) &&
+    Array.isArray(value.graph.edges) &&
+    value.graph.edges.every(isWorkflowEdge)
+  );
+}
+
+function isWorkflowNode(value: unknown): value is WorkflowNode {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.disabled !== "boolean" ||
+    !isWorkflowPosition(value.position) ||
+    !isRecord(value.config)
+  ) {
+    return false;
+  }
+  const config = value.config;
+  switch (value.kind) {
+    case "trigger":
+      return isWorkflowTriggerConfig(config);
+    case "agent":
+      return (
+        typeof config.agentProfileId === "string" &&
+        typeof config.prompt === "string" &&
+        typeof config.workingDirectory === "string" &&
+        Array.isArray(config.tools) &&
+        config.tools.every((tool) => typeof tool === "string") &&
+        isFiniteNumber(config.timeoutSeconds) &&
+        isWorkflowRetryPolicy(config.retry)
+      );
+    case "test":
+      return (
+        typeof config.command === "string" &&
+        typeof config.workingDirectory === "string" &&
+        isFiniteNumber(config.timeoutSeconds) &&
+        isWorkflowRetryPolicy(config.retry)
+      );
+    case "hook":
+      return (
+        ["pre-commit", "pre-push", "post-run", "custom"].includes(String(config.hook)) &&
+        typeof config.command === "string" &&
+        isFiniteNumber(config.timeoutSeconds) &&
+        isWorkflowRetryPolicy(config.retry)
+      );
+    case "approval":
+      return (
+        typeof config.instructions === "string" &&
+        typeof config.approverGroup === "string" &&
+        (config.timeoutMinutes === null || isFiniteNumber(config.timeoutMinutes)) &&
+        (config.timeoutOutcome === "reject" || config.timeoutOutcome === "fail")
+      );
+    case "branch":
+      return (
+        Array.isArray(config.cases) &&
+        config.cases.every(
+          (branchCase) =>
+            isRecord(branchCase) &&
+            typeof branchCase.id === "string" &&
+            typeof branchCase.label === "string" &&
+            typeof branchCase.expression === "string",
+        )
+      );
+    default:
+      return false;
+  }
+}
+
+function isWorkflowTriggerConfig(config: Readonly<Record<string, unknown>>): boolean {
+  switch (config.event) {
+    case "manual":
+    case "issue-queued":
+      return true;
+    case "issue-status":
+      return [
+        "Backlog",
+        "Planned",
+        "Ready",
+        "Queued",
+        "Running",
+        "Blocked",
+        "Review",
+        "Done",
+      ].includes(String(config.status));
+    case "repository":
+      return config.action === "push" || config.action === "pull-request";
+    case "schedule":
+      return typeof config.cron === "string" && typeof config.timezone === "string";
+    case "webhook":
+      return typeof config.path === "string";
+    default:
+      return false;
+  }
+}
+
+function isWorkflowRetryPolicy(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Number.isInteger(value.maxRetries) &&
+    (value.strategy === "fixed" || value.strategy === "exponential") &&
+    isFiniteNumber(value.delaySeconds) &&
+    isFiniteNumber(value.maxDelaySeconds)
+  );
+}
+
+function isWorkflowEdge(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.sourceNodeId !== "string" ||
+    typeof value.targetNodeId !== "string" ||
+    (value.label !== undefined && typeof value.label !== "string")
+  ) {
+    return false;
+  }
+  if (value.kind === "success" || value.kind === "failure") return true;
+  if (value.kind === "approval") {
+    return ["approved", "rejected", "timed-out"].includes(String(value.outcome));
+  }
+  return value.kind === "branch" && (value.caseId === null || typeof value.caseId === "string");
+}
+
+function isWorkflowPosition(value: unknown): boolean {
+  return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isWorkflowViewport(value: unknown): value is WorkflowViewport {
@@ -616,12 +964,15 @@ function deriveViewportByTemplateId(
   return Object.fromEntries(templates.map((template) => [template.id, DEFAULT_WORKFLOW_VIEWPORT]));
 }
 
-function deriveTestStateByNodeId(
+function deriveTestStateByNodeKey(
   templates: readonly WorkflowTemplate[],
 ): Readonly<Record<string, WorkflowTestState>> {
   return Object.fromEntries(
-    templates.flatMap(({ draft }) =>
-      draft.content.graph.nodes.map(({ id }) => [id, IDLE_WORKFLOW_TEST_STATE]),
+    templates.flatMap(({ draft, id: templateId }) =>
+      draft.content.graph.nodes.map(({ id }) => [
+        workflowNodeTestKey(templateId, id),
+        IDLE_WORKFLOW_TEST_STATE,
+      ]),
     ),
   );
 }
@@ -637,6 +988,7 @@ function commitHistory(
   state: WorkflowWorkspaceStore,
   template: WorkflowTemplate,
   history: WorkflowHistory,
+  invalidateTests: boolean,
 ): void {
   const updatedTemplate = { ...template, draft: history.present };
   set({
@@ -644,13 +996,17 @@ function commitHistory(
     historyByTemplateId: { ...state.historyByTemplateId, [template.id]: history },
     validationByTemplateId: {
       ...state.validationByTemplateId,
-      [template.id]: validateWorkflowDraft(history.present),
+      [template.id]: validateWorkflowDraft(history.present, WORKFLOW_VALIDATION_REFERENCES),
     },
-    testStateByNodeId: resetTemplateNodeTests(state.testStateByNodeId, template, updatedTemplate),
-    fullTestStateByTemplateId: {
-      ...state.fullTestStateByTemplateId,
-      [template.id]: IDLE_WORKFLOW_TEST_STATE,
-    },
+    testStateByNodeKey: invalidateTests
+      ? resetTemplateNodeTests(state.testStateByNodeKey, template, updatedTemplate)
+      : state.testStateByNodeKey,
+    fullTestStateByTemplateId: invalidateTests
+      ? {
+          ...state.fullTestStateByTemplateId,
+          [template.id]: IDLE_WORKFLOW_TEST_STATE,
+        }
+      : state.fullTestStateByTemplateId,
     selectedNodeId:
       state.selectedTemplateId === template.id &&
       state.selectedNodeId !== null &&
@@ -667,12 +1023,28 @@ function resetTemplateNodeTests(
 ): Readonly<Record<string, WorkflowTestState>> {
   const previousNodeIds = new Set(previousTemplate.draft.content.graph.nodes.map(({ id }) => id));
   const next = Object.fromEntries(
-    Object.entries(current).filter(([nodeId]) => !previousNodeIds.has(nodeId)),
+    Object.entries(current).filter(
+      ([key]) =>
+        ![...previousNodeIds].some(
+          (nodeId) => key === workflowNodeTestKey(previousTemplate.id, nodeId),
+        ),
+    ),
   );
   for (const { id } of updatedTemplate.draft.content.graph.nodes) {
-    next[id] = IDLE_WORKFLOW_TEST_STATE;
+    next[workflowNodeTestKey(updatedTemplate.id, id)] = IDLE_WORKFLOW_TEST_STATE;
   }
   return next;
+}
+
+function workflowContentAffectsExecution(
+  previous: WorkflowTemplate["draft"]["content"],
+  next: WorkflowTemplate["draft"]["content"],
+): boolean {
+  const executionShape = (content: WorkflowTemplate["draft"]["content"]) => ({
+    nodes: content.graph.nodes.map(({ name: _name, position: _position, ...node }) => node),
+    edges: content.graph.edges,
+  });
+  return JSON.stringify(executionShape(previous)) !== JSON.stringify(executionShape(next));
 }
 
 function replaceTemplate(

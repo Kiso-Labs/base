@@ -15,8 +15,7 @@ import {
   type EdgeChange,
   type NodeChange,
   type OnConnect,
-  type OnEdgesDelete,
-  type OnNodesDelete,
+  type OnDelete,
 } from "@xyflow/react";
 import {
   AlertTriangleIcon,
@@ -27,10 +26,12 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CircleDotIcon,
+  Clock3Icon,
   FlaskConicalIcon,
   GitBranchIcon,
   HandIcon,
   LayoutTemplateIcon,
+  LoaderCircleIcon,
   Maximize2Icon,
   PanelRightIcon,
   PlayIcon,
@@ -70,7 +71,13 @@ import {
   workflowConnectionToEdge,
   workflowNodePositionsCommand,
 } from "./workflowCanvasAdapter";
-import type { WorkflowCommand, WorkflowNode, WorkflowTemplate } from "./workflowGraph";
+import {
+  workflowContentChecksum,
+  type WorkflowAtomicCommand,
+  type WorkflowCommand,
+  type WorkflowNode,
+  type WorkflowTemplate,
+} from "./workflowGraph";
 import {
   WORKFLOW_NODE_DEFINITIONS,
   createWorkflowNode,
@@ -80,6 +87,7 @@ import {
 import {
   deriveWorkflowSummaries,
   useWorkflowWorkspaceStore,
+  workflowNodeTestKey,
   workflowTriggerBindingKey,
   type WorkflowTestState,
 } from "./workflowWorkspaceStore";
@@ -105,6 +113,7 @@ const NODE_KIND_ACCENT = {
 function testStateForCanvas(state: WorkflowTestState | undefined): WorkflowNodeTestState {
   if (!state || state.status === "idle") return "idle";
   if (state.status === "running") return "running";
+  if (state.status === "waiting-for-approval") return "waiting-for-approval";
   return state.status === "passed" ? "succeeded" : "failed";
 }
 
@@ -124,7 +133,7 @@ function TemplateRail({
   const templates = useWorkflowWorkspaceStore((state) => state.templates);
   const selectTemplate = useWorkflowWorkspaceStore((state) => state.selectTemplate);
   const [query, setQuery] = useState("");
-  const summaries = deriveWorkflowSummaries(templates);
+  const summaries = useMemo(() => deriveWorkflowSummaries(templates), [templates]);
   const matchingDefinitions = WORKFLOW_NODE_DEFINITIONS.filter((definition) =>
     `${definition.label} ${definition.description} ${definition.group}`
       .toLocaleLowerCase()
@@ -333,6 +342,7 @@ function BuilderToolbar({
   onToggleInspector,
   onUndo,
   onValidate,
+  publishDisabledReason,
   template,
   tool,
   validationCount,
@@ -350,12 +360,14 @@ function BuilderToolbar({
   readonly onToggleInspector: () => void;
   readonly onUndo: () => void;
   readonly onValidate: () => void;
+  readonly publishDisabledReason: string | null;
   readonly template: WorkflowTemplate;
   readonly tool: "select" | "pan";
   readonly validationCount: number;
   readonly onToolChange: (tool: "select" | "pan") => void;
 }) {
-  const summary = deriveWorkflowSummaries([template])[0]!;
+  const summary = useMemo(() => deriveWorkflowSummaries([template])[0], [template]);
+  const templateStatus = template.archivedAt ? "Archived" : (summary?.status ?? "Draft");
   return (
     <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border/65 bg-background/92 px-3 backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-2">
@@ -364,12 +376,12 @@ function BuilderToolbar({
             <p className="max-w-64 truncate text-[11px] font-semibold">
               {template.draft.content.name}
             </p>
-            <Badge size="sm" variant={summary.status === "Published" ? "success" : "warning"}>
-              {summary.status}
+            <Badge size="sm" variant={templateStatus === "Published" ? "success" : "warning"}>
+              {templateStatus}
             </Badge>
           </div>
           <p className="text-[9px] text-muted-foreground">
-            v{summary.version} · revision {template.draft.revision}
+            v{summary?.version ?? 0} · revision {template.draft.revision}
           </p>
         </div>
         <div className="ml-2 hidden items-center rounded-md border border-border/70 bg-muted/20 p-0.5 sm:flex">
@@ -416,15 +428,31 @@ function BuilderToolbar({
           <PlayIcon />
           Test
         </Button>
-        <Button className="relative" onClick={onPublish} size="xs">
-          <RocketIcon />
-          Publish
-          {validationCount > 0 ? (
-            <span className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-destructive font-mono text-[8px] text-destructive-foreground ring-2 ring-background">
-              {validationCount}
-            </span>
-          ) : null}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span className="ml-1 inline-flex">
+                <Button
+                  className="relative"
+                  disabled={publishDisabledReason !== null}
+                  onClick={onPublish}
+                  size="xs"
+                >
+                  <RocketIcon />
+                  Publish
+                  {validationCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-destructive font-mono text-[8px] text-destructive-foreground ring-2 ring-background">
+                      {validationCount}
+                    </span>
+                  ) : null}
+                </Button>
+              </span>
+            }
+          />
+          <TooltipPopup>
+            {publishDisabledReason ?? "Publish an immutable version for future project runs"}
+          </TooltipPopup>
+        </Tooltip>
         <ToolbarIconButton
           label={inspectorOpen ? "Hide inspector" : "Show inspector"}
           onClick={onToggleInspector}
@@ -516,7 +544,7 @@ function WorkflowCanvas({
   readonly railCollapsed: boolean;
   readonly selectedTemplate: WorkflowTemplate;
 }) {
-  const { selectedProject } = useBaseWorkspace();
+  const { selectedProject, snapshot } = useBaseWorkspace();
   const issueViews = useIssueWorkspaceStore((state) => state.views);
   const kanbanViews = useMemo(
     () =>
@@ -536,7 +564,7 @@ function WorkflowCanvas({
   const history = useWorkflowWorkspaceStore(
     (state) => state.historyByTemplateId[selectedTemplate.id],
   );
-  const testStateByNodeId = useWorkflowWorkspaceStore((state) => state.testStateByNodeId);
+  const testStateByNodeKey = useWorkflowWorkspaceStore((state) => state.testStateByNodeKey);
   const fullTestState = useWorkflowWorkspaceStore(
     (state) => state.fullTestStateByTemplateId[selectedTemplate.id],
   );
@@ -559,12 +587,12 @@ function WorkflowCanvas({
   const canvasTestStates = useMemo(
     () =>
       Object.fromEntries(
-        Object.entries(testStateByNodeId).map(([nodeId, state]) => [
+        selectedTemplate.draft.content.graph.nodes.map(({ id: nodeId }) => [
           nodeId,
-          testStateForCanvas(state),
+          testStateForCanvas(testStateByNodeKey[workflowNodeTestKey(selectedTemplate.id, nodeId)]),
         ]),
       ),
-    [testStateByNodeId],
+    [selectedTemplate.draft.content.graph.nodes, selectedTemplate.id, testStateByNodeKey],
   );
   const triggerBindingLabels = useMemo(
     () =>
@@ -601,8 +629,22 @@ function WorkflowCanvas({
       const result = testNode(nodeId);
       if (!result) return;
       toastManager.add({
-        type: result.status === "passed" ? "success" : "error",
-        title: result.status === "passed" ? "Step test passed" : "Step test failed",
+        type:
+          result.status === "passed"
+            ? "success"
+            : result.status === "failed"
+              ? "error"
+              : result.status === "waiting-for-approval"
+                ? "warning"
+                : "info",
+        title:
+          result.status === "waiting-for-approval"
+            ? "Approval required"
+            : result.status === "running"
+              ? "Step test started"
+              : result.status === "passed"
+                ? "Step test passed"
+                : "Step test failed",
         description: result.message,
       });
     },
@@ -696,33 +738,36 @@ function WorkflowCanvas({
       ).ok,
     [selectedTemplate.draft],
   );
-  const onNodesDelete = useCallback<OnNodesDelete<WorkflowCanvasNodeElement>>(
-    (deletedNodes) => {
-      const result = executeCommand(selectedTemplate.id, {
-        type: "nodes.remove",
-        nodeIds: deletedNodes.map(({ id }) => id),
-      });
-      if (!result.ok)
+  const onDelete = useCallback<OnDelete<WorkflowCanvasNodeElement, WorkflowCanvasEdgeElement>>(
+    ({ edges: deletedEdges, nodes: deletedNodes }) => {
+      const deletedNodeIds = new Set(deletedNodes.map(({ id }) => id));
+      const commands: WorkflowAtomicCommand[] = [];
+      if (deletedNodeIds.size > 0) {
+        commands.push({ type: "nodes.remove", nodeIds: [...deletedNodeIds] });
+      }
+      const standaloneEdgeIds = deletedEdges
+        .filter(({ source, target }) => !deletedNodeIds.has(source) && !deletedNodeIds.has(target))
+        .map(({ id }) => id);
+      if (standaloneEdgeIds.length > 0) {
+        commands.push({ type: "edges.remove", edgeIds: standaloneEdgeIds });
+      }
+      if (commands.length === 0) return;
+      const result = executeCommand(
+        selectedTemplate.id,
+        commands.length === 1 ? commands[0]! : { type: "batch", commands },
+      );
+      if (!result.ok) {
         toastManager.add({ type: "error", title: "Delete blocked", description: result.reason });
-      selectNode(null);
+        return;
+      }
+      if (deletedNodeIds.size > 0) selectNode(null);
     },
     [executeCommand, selectNode, selectedTemplate.id],
   );
-  const onEdgesDelete = useCallback<OnEdgesDelete<WorkflowCanvasEdgeElement>>(
-    (deletedEdges) => {
-      const result = executeCommand(selectedTemplate.id, {
-        type: "edges.remove",
-        edgeIds: deletedEdges.map(({ id }) => id),
-      });
-      if (!result.ok)
-        toastManager.add({ type: "error", title: "Delete blocked", description: result.reason });
-    },
-    [executeCommand, selectedTemplate.id],
-  );
   const onNodeDragStop = useCallback(() => {
-    const command = workflowNodePositionsCommand(nodes);
+    const command = workflowNodePositionsCommand(reactFlow.getNodes());
     if (command) executeCommand(selectedTemplate.id, command);
-  }, [executeCommand, nodes, selectedTemplate.id]);
+  }, [executeCommand, reactFlow, selectedTemplate.id]);
 
   const addNode = useCallback(
     (kind: WorkflowNode["kind"]) => {
@@ -738,23 +783,22 @@ function WorkflowCanvas({
           ? source.position.y
           : 120 + (selectedTemplate.draft.content.graph.nodes.length % 4) * 150,
       });
-      const result = executeCommand(selectedTemplate.id, { type: "node.add", node });
-      if (!result.ok) {
-        toastManager.add({
-          type: "error",
-          title: "Node could not be added",
-          description: result.reason,
-        });
-        return;
-      }
+      const commands: WorkflowAtomicCommand[] = [{ type: "node.add", node }];
       if (source && node.kind !== "trigger") {
         const output = workflowNodeOutputs(source)[0];
-        const currentDraft = useWorkflowWorkspaceStore
-          .getState()
-          .templates.find(({ id }) => id === selectedTemplate.id)?.draft;
-        if (output && currentDraft) {
+        if (output) {
+          const provisionalDraft = {
+            ...selectedTemplate.draft,
+            content: {
+              ...selectedTemplate.draft.content,
+              graph: {
+                ...selectedTemplate.draft.content.graph,
+                nodes: [...selectedTemplate.draft.content.graph.nodes, node],
+              },
+            },
+          };
           const edgeResult = workflowConnectionToEdge(
-            currentDraft,
+            provisionalDraft,
             {
               source: source.id,
               sourceHandle: output.id,
@@ -763,9 +807,28 @@ function WorkflowCanvas({
             },
             `${source.id}:${output.id}:${node.id}`,
           );
-          if (edgeResult.ok)
-            executeCommand(selectedTemplate.id, { type: "edge.connect", edge: edgeResult.edge });
+          if (!edgeResult.ok) {
+            toastManager.add({
+              type: "error",
+              title: "Step could not be inserted",
+              description: edgeResult.reason,
+            });
+            return;
+          }
+          commands.push({ type: "edge.connect", edge: edgeResult.edge });
         }
+      }
+      const result = executeCommand(
+        selectedTemplate.id,
+        commands.length === 1 ? commands[0]! : { type: "batch", commands },
+      );
+      if (!result.ok) {
+        toastManager.add({
+          type: "error",
+          title: "Node could not be added",
+          description: result.reason,
+        });
+        return;
       }
       setInsertAfterNodeId(null);
       selectNode(node.id);
@@ -796,6 +859,14 @@ function WorkflowCanvas({
         ]
       : undefined;
   const blockingErrors = validation.diagnostics.filter(({ severity }) => severity === "error");
+  const latestVersion = selectedTemplate.versions.at(-1);
+  const publishDisabledReason = selectedTemplate.archivedAt
+    ? "Archived workflows cannot be published."
+    : blockingErrors.length > 0
+      ? "Resolve workflow validation errors before publishing."
+      : latestVersion?.checksum === workflowContentChecksum(selectedTemplate.draft.content)
+        ? `The draft already matches published v${latestVersion.version}.`
+        : null;
   const showValidation = validationOpen;
 
   return (
@@ -825,8 +896,8 @@ function WorkflowCanvas({
           const result = testWorkflow(selectedTemplate.id);
           if (!result) return;
           toastManager.add({
-            type: result.status === "passed" ? "success" : "error",
-            title: result.status === "passed" ? "Workflow test passed" : "Workflow test failed",
+            type: result.status === "failed" ? "error" : "info",
+            title: result.status === "running" ? "Workflow test started" : "Workflow test result",
             description: result.message,
           });
         }}
@@ -838,6 +909,7 @@ function WorkflowCanvas({
         onUndo={() => undo(selectedTemplate.id)}
         onValidate={() => setValidationOpen(true)}
         onToolChange={setTool}
+        publishDisabledReason={publishDisabledReason}
         template={selectedTemplate}
         tool={tool}
         validationCount={blockingErrors.length}
@@ -881,12 +953,11 @@ function WorkflowCanvas({
             nodesDraggable={tool === "select"}
             onConnect={onConnect}
             onEdgesChange={onEdgesChange}
-            onEdgesDelete={onEdgesDelete}
+            onDelete={onDelete}
             onMoveEnd={(_event, nextViewport) => setViewport(selectedTemplate.id, nextViewport)}
             onNodeClick={(_event, node) => inspectNode(node.id)}
             onNodeDragStop={onNodeDragStop}
             onNodesChange={onNodesChange}
-            onNodesDelete={onNodesDelete}
             onPaneClick={() => selectNode(null)}
             panOnDrag={tool === "pan" ? true : [1, 2]}
             panOnScroll
@@ -1007,16 +1078,30 @@ function WorkflowCanvas({
             <div
               className={cn(
                 "absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-lg border bg-background/94 px-3 py-2 text-[10px] shadow-lg backdrop-blur-xl",
-                fullTestState.status === "passed" ? "border-success/25" : "border-destructive/25",
+                fullTestState.status === "passed"
+                  ? "border-success/25"
+                  : fullTestState.status === "failed"
+                    ? "border-destructive/25"
+                    : fullTestState.status === "waiting-for-approval"
+                      ? "border-warning/25"
+                      : "border-info/25",
               )}
             >
               {fullTestState.status === "passed" ? (
                 <CheckCircle2Icon className="size-3.5 text-success" />
+              ) : fullTestState.status === "running" ? (
+                <LoaderCircleIcon className="size-3.5 animate-spin text-info" />
+              ) : fullTestState.status === "waiting-for-approval" ? (
+                <Clock3Icon className="size-3.5 text-warning" />
               ) : (
                 <AlertTriangleIcon className="size-3.5 text-destructive" />
               )}
               <span className="font-medium">{fullTestState.message}</span>
-              <span className="font-mono text-muted-foreground">{fullTestState.durationMs}ms</span>
+              {fullTestState.durationMs === null ? null : (
+                <span className="font-mono text-muted-foreground">
+                  {fullTestState.durationMs}ms
+                </span>
+              )}
             </div>
           ) : null}
         </main>
@@ -1035,14 +1120,35 @@ function WorkflowCanvas({
                 description: result.ok ? "Validation refreshed for this draft." : result.reason,
               });
             }}
-            onUpdateTriggerView={(viewId) => {
-              if (selectedNode?.kind !== "trigger") return;
-              const result = setTriggerBinding({
-                projectId: selectedProject.id,
-                templateId: selectedTemplate.id,
-                nodeId: selectedNode.id,
-                viewId,
+            onUpdateTriggerView={(triggerNode, viewId) => {
+              const updateResult = executeCommand(selectedTemplate.id, {
+                type: "node.update",
+                node: triggerNode,
               });
+              if (!updateResult.ok) {
+                toastManager.add({
+                  type: "error",
+                  title: "Binding blocked",
+                  description: updateResult.reason,
+                });
+                return;
+              }
+              const result = setTriggerBinding(
+                {
+                  projectId: selectedProject.id,
+                  templateId: selectedTemplate.id,
+                  nodeId: triggerNode.id,
+                  viewId,
+                },
+                {
+                  projectIds: snapshot.projects.map(({ id }) => id),
+                  views: issueViews.map(({ id, layout, projectId }) => ({
+                    id,
+                    layout,
+                    projectId,
+                  })),
+                },
+              );
               toastManager.add({
                 type: result.ok ? "success" : "error",
                 title: result.ok ? "Board trigger updated" : "Binding blocked",

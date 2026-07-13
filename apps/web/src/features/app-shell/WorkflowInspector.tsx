@@ -23,6 +23,7 @@ import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "~/lib/utils";
 
+import { WORKFLOW_AGENT_PROFILES } from "./workflowAgentProfiles";
 import type {
   WorkflowDiagnostic,
   WorkflowNode,
@@ -48,12 +49,12 @@ const NODE_KIND_META = {
 
 function Field({ children, label }: { readonly children: ReactNode; readonly label: string }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+    <Label className="block text-foreground">
+      <span className="block text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
         {label}
-      </Label>
-      {children}
-    </div>
+      </span>
+      <span className="mt-1.5 block font-normal tracking-normal">{children}</span>
+    </Label>
   );
 }
 
@@ -319,9 +320,11 @@ function NodeConfiguration({
             }
             value={node.config.agentProfileId}
           >
-            <option value="agent-profile-codex">Codex · implementation</option>
-            <option value="agent-profile-planning">Codex · planning</option>
-            <option value="agent-profile-review">Codex · review</option>
+            {WORKFLOW_AGENT_PROFILES.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.label}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Instructions">
@@ -644,7 +647,10 @@ export function WorkflowInspector({
   readonly kanbanViews: readonly { readonly id: string; readonly name: string }[];
   readonly node: WorkflowNode | null;
   readonly onClose: () => void;
-  readonly onUpdateTriggerView: (viewId: string | null) => void;
+  readonly onUpdateTriggerView: (
+    node: Extract<WorkflowNode, { readonly kind: "trigger" }>,
+    viewId: string | null,
+  ) => void;
   readonly onUpdateNode: (node: WorkflowNode) => void;
   readonly onUpdateWorkflow: (metadata: {
     readonly name: string;
@@ -778,6 +784,7 @@ export function WorkflowInspector({
                       className={SELECT_CLASS_NAME}
                       onChange={(event) =>
                         onUpdateTriggerView(
+                          draftNode,
                           event.currentTarget.value === "__project__"
                             ? null
                             : event.currentTarget.value,

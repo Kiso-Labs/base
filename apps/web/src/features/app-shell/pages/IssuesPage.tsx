@@ -1,5 +1,6 @@
 import {
   ArrowUpDownIcon,
+  BookmarkIcon,
   CircleCheckIcon,
   CircleDashedIcon,
   CircleDotDashedIcon,
@@ -10,12 +11,14 @@ import {
   Layers3Icon,
   LoaderCircleIcon,
   MoreHorizontalIcon,
+  InboxIcon,
   OctagonXIcon,
   PlayIcon,
   PlusIcon,
   SignalHighIcon,
   SignalLowIcon,
   SignalMediumIcon,
+  SearchXIcon,
   WorkflowIcon,
   XIcon,
   type LucideIcon,
@@ -25,6 +28,14 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "~/components/ui/empty";
 import { cn } from "~/lib/utils";
 
 import { BasePageShell } from "../BasePageShell";
@@ -36,6 +47,7 @@ import {
   DEFAULT_ISSUE_FILTERS,
   filterIssues,
   groupIssues,
+  hasActiveIssueFilters,
 } from "../issueRepository";
 import { useIssueWorkspaceStore } from "../issueWorkspaceStore";
 import { ProjectIssueViewBar } from "../ProjectIssueViewBar";
@@ -274,6 +286,90 @@ function IssueRow({
   );
 }
 
+function IssuesEmptyState({
+  activeViewName,
+  hasProjectIssues,
+  onClearFilters,
+  onCreateIssue,
+  onViewAll,
+  projectName,
+}: {
+  readonly activeViewName: string | null;
+  readonly hasProjectIssues: boolean;
+  readonly onClearFilters: () => void;
+  readonly onCreateIssue: () => void;
+  readonly onViewAll: () => void;
+  readonly projectName: string;
+}) {
+  if (!hasProjectIssues) {
+    return (
+      <Empty className="min-h-72">
+        <EmptyMedia variant="icon">
+          <InboxIcon />
+        </EmptyMedia>
+        <EmptyHeader>
+          <EmptyTitle className="text-base">Start planning {projectName}</EmptyTitle>
+          <EmptyDescription className="max-w-xs text-xs leading-relaxed">
+            This project has no issues yet. Create the first issue to start building its backlog and
+            workflow queue.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button onClick={onCreateIssue} size="sm">
+            <PlusIcon />
+            Create first issue
+          </Button>
+        </EmptyContent>
+      </Empty>
+    );
+  }
+
+  if (activeViewName) {
+    return (
+      <Empty className="min-h-72">
+        <EmptyMedia variant="icon">
+          <BookmarkIcon />
+        </EmptyMedia>
+        <EmptyHeader>
+          <EmptyTitle className="text-base">No issues in {activeViewName}</EmptyTitle>
+          <EmptyDescription className="max-w-sm text-xs leading-relaxed">
+            This project view is live, so issues will appear here when they match its saved filters.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent className="flex-row justify-center gap-2">
+          <Button onClick={onViewAll} size="sm" variant="outline">
+            View all issues
+          </Button>
+          <Button onClick={onCreateIssue} size="sm">
+            <PlusIcon />
+            New issue
+          </Button>
+        </EmptyContent>
+      </Empty>
+    );
+  }
+
+  return (
+    <Empty className="min-h-72">
+      <EmptyMedia variant="icon">
+        <SearchXIcon />
+      </EmptyMedia>
+      <EmptyHeader>
+        <EmptyTitle className="text-base">No matching issues</EmptyTitle>
+        <EmptyDescription className="max-w-sm text-xs leading-relaxed">
+          The project has issues, but none match the current search and filters.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button onClick={onClearFilters} size="sm" variant="outline">
+          <XIcon />
+          Clear filters
+        </Button>
+      </EmptyContent>
+    </Empty>
+  );
+}
+
 export function IssuesPage() {
   const { selectedProject, snapshot } = useBaseWorkspace();
   const filters = useIssueWorkspaceStore(
@@ -283,15 +379,22 @@ export function IssuesPage() {
   const groupBy = useIssueWorkspaceStore(
     (state) => state.groupByByProject[selectedProject.id] ?? DEFAULT_ISSUE_GROUP_BY,
   );
+  const views = useIssueWorkspaceStore((state) => state.views);
+  const activeViewId = useIssueWorkspaceStore(
+    (state) => state.activeViewIdByProject[selectedProject.id] ?? null,
+  );
   const toggleIssueSelection = useIssueWorkspaceStore((state) => state.toggleIssueSelection);
   const setIssueSelection = useIssueWorkspaceStore((state) => state.setIssueSelection);
   const clearIssueSelection = useIssueWorkspaceStore((state) => state.clearIssueSelection);
   const selectIssue = useIssueWorkspaceStore((state) => state.selectIssue);
   const uiIntent = useIssueWorkspaceStore((state) => state.uiIntent);
   const consumeUiIntent = useIssueWorkspaceStore((state) => state.consumeUiIntent);
+  const activateView = useIssueWorkspaceStore((state) => state.activateView);
+  const resetFilters = useIssueWorkspaceStore((state) => state.resetFilters);
   const [createOpen, setCreateOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [sort, setSort] = useState<"updated" | "priority">("updated");
+  const projectIssues = snapshot.issues.filter(({ projectId }) => projectId === selectedProject.id);
   const filteredIssues = filterIssues(snapshot.issues, selectedProject.id, filters);
   const visibleIssues = useMemo(
     () =>
@@ -308,6 +411,16 @@ export function IssuesPage() {
   const visibleIssueIds = visibleIssues.map(({ id }) => id);
   const allVisibleSelected =
     visibleIssueIds.length > 0 && visibleIssueIds.every((issueId) => selectedSet.has(issueId));
+  const activeView = views.find(
+    (view) => view.id === activeViewId && view.projectId === selectedProject.id,
+  );
+  const allIssuesView = views.find(
+    (view) =>
+      view.projectId === selectedProject.id &&
+      view.kind === "system" &&
+      view.layout === "list" &&
+      !hasActiveIssueFilters(view.filters),
+  );
 
   useEffect(() => {
     if (uiIntent?.type !== "queue-view" || uiIntent.projectId !== selectedProject.id) return;
@@ -379,7 +492,10 @@ export function IssuesPage() {
             </Button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto" role="list">
+          <div
+            className="min-h-0 flex-1 overflow-y-auto"
+            role={visibleIssues.length > 0 ? "list" : undefined}
+          >
             {visibleGroups.map((group) => (
               <Fragment key={group.key}>
                 {groupBy === "status" ? (
@@ -409,9 +525,17 @@ export function IssuesPage() {
               </Fragment>
             ))}
             {visibleIssues.length === 0 ? (
-              <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
-                No issues match the current project filters.
-              </div>
+              <IssuesEmptyState
+                activeViewName={projectIssues.length > 0 ? (activeView?.name ?? null) : null}
+                hasProjectIssues={projectIssues.length > 0}
+                onClearFilters={() => resetFilters(selectedProject.id)}
+                onCreateIssue={() => setCreateOpen(true)}
+                onViewAll={() => {
+                  if (allIssuesView) activateView(selectedProject.id, allIssuesView.id);
+                  else resetFilters(selectedProject.id);
+                }}
+                projectName={selectedProject.name}
+              />
             ) : null}
           </div>
         </div>

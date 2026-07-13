@@ -179,6 +179,8 @@ export interface IssueRepositoryState {
   readonly runs: readonly BaseRunSummary[];
   readonly workflowIds: readonly string[];
   readonly workflowVersionById: Readonly<Record<string, number | null>>;
+  readonly workflowExecutableById: Readonly<Record<string, boolean>>;
+  readonly workflowNameById: Readonly<Record<string, string>>;
   readonly nextIssueNumberByProject: Readonly<Record<string, number>>;
   readonly nextRunNumber: number;
 }
@@ -291,6 +293,8 @@ export function createIssueRepositoryState(snapshot: BaseWorkspaceSnapshot): Iss
     workflowVersionById: Object.fromEntries(
       snapshot.workflows.map(({ id, version }) => [id, version > 0 ? version : null]),
     ),
+    workflowExecutableById: Object.fromEntries(snapshot.workflows.map(({ id }) => [id, true])),
+    workflowNameById: Object.fromEntries(snapshot.workflows.map(({ id, name }) => [id, name])),
     nextIssueNumberByProject: nextIssueNumbersByProject(snapshot.issues),
     nextRunNumber: nextRunNumber(snapshot.runs),
   };
@@ -631,6 +635,13 @@ export function queueIssues(
       });
       continue;
     }
+    if (state.workflowExecutableById[runWorkflowId] === false) {
+      rejected.push({
+        issueId,
+        reason: `Restore the archived workflow assigned to ${issue.identifier} before queueing it.`,
+      });
+      continue;
+    }
     const workflowVersion = state.workflowVersionById[runWorkflowId];
     if (workflowVersion === null || workflowVersion === undefined) {
       rejected.push({
@@ -673,6 +684,7 @@ export function queueIssues(
       workflowId: runWorkflowId,
       workflowVersionId: `${runWorkflowId}:v${workflowVersion}`,
       workflowVersion,
+      workflowName: state.workflowNameById[runWorkflowId] ?? runWorkflowId,
       issueId: issue.id,
       status: "Queued",
       currentStep: "Waiting for capacity",
@@ -714,6 +726,11 @@ export function updateIssue(
   if (!title) {
     return { ok: false, state, reason: "Issue title is required." };
   }
+  const projectDependencyIds = new Set(
+    state.issues
+      .filter((candidate) => candidate.projectId === issue.projectId && candidate.id !== issue.id)
+      .map(({ id }) => id),
+  );
 
   const nextIssue: BaseIssueSummary = {
     ...issue,
@@ -726,7 +743,9 @@ export function updateIssue(
     assignee: input.assignee?.trim() || issue.assignee,
     branch: input.branch?.trim() || issue.branch,
     dependencies: input.dependencies
-      ? uniqueCleanStrings(input.dependencies).filter((dependency) => dependency !== issue.id)
+      ? uniqueCleanStrings(input.dependencies).filter((dependency) =>
+          projectDependencyIds.has(dependency),
+        )
       : issue.dependencies,
     updatedAt: "Just now",
     activity: [

@@ -28,6 +28,7 @@ import {
   baseWorkspaceRepository,
   type BaseIssueStatus,
   type BaseIssueSummary,
+  type BaseRunSummary,
 } from "./workspaceRepository";
 
 export type IssueUiIntent =
@@ -64,7 +65,12 @@ interface IssueWorkspaceStore extends IssueRepositoryState {
   ) => QueueIssuesResult;
   readonly dequeueIssue: (issueId: string) => IssueMutationResult;
   readonly syncWorkflowCatalog: (
-    workflows: readonly { readonly id: string; readonly version: number | null }[],
+    workflows: readonly {
+      readonly id: string;
+      readonly version: number | null;
+      readonly executable: boolean;
+      readonly name: string;
+    }[],
   ) => void;
   readonly setFilters: (projectId: string, filters: Partial<IssueFilters>) => void;
   readonly resetFilters: (projectId: string) => void;
@@ -92,12 +98,43 @@ const initialActiveViewIdByProject: Readonly<Record<string, string | null>> = Ob
   initialSnapshot.projects.map(({ id }) => [id, `view-${id}-all`]),
 );
 
+function migrateIssueWorkspaceState(persistedState: unknown): Partial<IssueWorkspaceStore> {
+  if (typeof persistedState !== "object" || persistedState === null) return {};
+  const state = persistedState as Partial<IssueWorkspaceStore>;
+  const persistedRuns = (persistedState as { readonly runs?: unknown }).runs;
+  if (!Array.isArray(persistedRuns)) return state;
+  const workflowNameById = {
+    ...initialRepositoryState.workflowNameById,
+    ...state.workflowNameById,
+  };
+  const runs = persistedRuns.map((run): BaseRunSummary | unknown => {
+    if (
+      typeof run !== "object" ||
+      run === null ||
+      !("workflowId" in run) ||
+      typeof run.workflowId !== "string"
+    ) {
+      return run;
+    }
+    if ("workflowName" in run && typeof run.workflowName === "string" && run.workflowName.trim()) {
+      return run;
+    }
+    return {
+      ...run,
+      workflowName: workflowNameById[run.workflowId] ?? run.workflowId,
+    } as BaseRunSummary;
+  });
+  return { ...state, runs: runs as readonly BaseRunSummary[] };
+}
+
 function repositoryState(state: IssueWorkspaceStore): IssueRepositoryState {
   return {
     issues: state.issues,
     runs: state.runs,
     workflowIds: state.workflowIds,
     workflowVersionById: state.workflowVersionById,
+    workflowExecutableById: state.workflowExecutableById,
+    workflowNameById: state.workflowNameById,
     nextIssueNumberByProject: state.nextIssueNumberByProject,
     nextRunNumber: state.nextRunNumber,
   };
@@ -147,11 +184,32 @@ export const useIssueWorkspaceStore = create<IssueWorkspaceStore>()(
         },
         dequeueIssue: (issueId) => commitIssueMutation((state) => dequeueIssue(state, issueId)),
         syncWorkflowCatalog: (workflows) =>
-          set({
-            workflowIds: workflows.map(({ id }) => id),
-            workflowVersionById: Object.fromEntries(
+          set((state) => {
+            const workflowIds = workflows.map(({ id }) => id);
+            const workflowVersionById = Object.fromEntries(
               workflows.map(({ id, version }) => [id, version]),
-            ),
+            );
+            const workflowExecutableById = Object.fromEntries(
+              workflows.map(({ executable, id }) => [id, executable]),
+            );
+            const workflowNameById = Object.fromEntries(
+              workflows.map(({ id, name }) => [id, name]),
+            );
+            if (
+              JSON.stringify(state.workflowIds) === JSON.stringify(workflowIds) &&
+              JSON.stringify(state.workflowVersionById) === JSON.stringify(workflowVersionById) &&
+              JSON.stringify(state.workflowExecutableById) ===
+                JSON.stringify(workflowExecutableById) &&
+              JSON.stringify(state.workflowNameById) === JSON.stringify(workflowNameById)
+            ) {
+              return state;
+            }
+            return {
+              workflowIds,
+              workflowVersionById,
+              workflowExecutableById,
+              workflowNameById,
+            };
           }),
         setFilters: (projectId, filters) =>
           set((state) => ({
@@ -233,7 +291,7 @@ export const useIssueWorkspaceStore = create<IssueWorkspaceStore>()(
     },
     {
       name: "base:issue-workspace:v2",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() =>
         resolveStorage(typeof window !== "undefined" ? window.localStorage : undefined),
       ),
@@ -242,6 +300,8 @@ export const useIssueWorkspaceStore = create<IssueWorkspaceStore>()(
         runs: state.runs,
         workflowIds: state.workflowIds,
         workflowVersionById: state.workflowVersionById,
+        workflowExecutableById: state.workflowExecutableById,
+        workflowNameById: state.workflowNameById,
         nextIssueNumberByProject: state.nextIssueNumberByProject,
         nextRunNumber: state.nextRunNumber,
         views: state.views,
@@ -250,6 +310,7 @@ export const useIssueWorkspaceStore = create<IssueWorkspaceStore>()(
         activeViewIdByProject: state.activeViewIdByProject,
         selectedIssueId: state.selectedIssueId,
       }),
+      migrate: migrateIssueWorkspaceState,
     },
   ),
 );

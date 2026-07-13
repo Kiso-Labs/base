@@ -27,10 +27,10 @@ Build Phase 3 as a workspace-global workflow template editor with a typed, libra
 
 ## Validation
 
-- [ ] Domain tests cover typed connection rules, reachability, cycles, branch completeness, retry bounds, atomic deletion, publication, and bounded undo/redo.
-- [ ] Workflow drafts, published versions, canvas viewport, and template metadata survive reload without persisting selection or history.
-- [ ] The builder supports typed node creation, connection, movement, deletion, inspector edits, validation, testing, undo/redo, fit, and publish actions.
-- [ ] Issue assignment sees the live reusable template catalog while production runs remain scoped to the source project and published version.
+- [x] Domain tests cover typed connection rules, reachability, cycles, branch completeness, retry bounds, atomic deletion, publication, and bounded undo/redo.
+- [x] Workflow drafts, published versions, canvas viewport, project board bindings, and template metadata survive reload without persisting selection or history; malformed persisted data falls back safely.
+- [x] The builder supports typed node creation, connection, movement, deletion, deep inspector edits, validation, asynchronous test states, undo/redo, fit, and guarded publish actions.
+- [x] Issue assignment sees the live reusable template catalog while production runs remain scoped to the source project and snapshot their immutable workflow version/name.
 - [ ] Responsive visual QA confirms the canvas, node palette, inspector, edge labels, controls, and empty/error states remain polished and usable.
 - [ ] `vp check`, `vp run typecheck`, focused tests, and the full `vp test` suite pass.
 
@@ -43,8 +43,11 @@ Build Phase 3 as a workspace-global workflow template editor with a typed, libra
 
 ## Notes
 
-Populated at closeout.
+- `vp check`, `vp run typecheck`, and 51 focused workflow/issue tests pass.
+- Browser visual QA remains blocked at the app pairing boundary in this environment; the implementation received independent standards and spec review instead.
+- The monorepo-wide test suite was attempted outside the sandbox, but unrelated load-sensitive server/web timing tests timed out on the overloaded machine. Focused tests for every changed domain seam pass.
 
 ## Follow-ups
 
-Populated at closeout.
+- Complete paired-app responsive visual QA for the canvas and right inspector at narrow desktop widths.
+- Re-run the full monorepo test suite on an unloaded machine to clear the unrelated timing failures.

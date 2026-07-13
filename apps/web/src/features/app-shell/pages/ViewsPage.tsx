@@ -407,7 +407,13 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
         density="canvas"
         description="Choose the issue setup this view should preserve."
         headerActions={
-          <Button aria-label="Copy view link" size="icon-xs" variant="ghost">
+          <Button
+            aria-label="Copy view link"
+            disabled
+            size="icon-xs"
+            title="Save the view before copying its link"
+            variant="ghost"
+          >
             <LinkIcon className="size-3.5" />
           </Button>
         }

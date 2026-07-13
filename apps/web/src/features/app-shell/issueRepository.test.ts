@@ -204,6 +204,44 @@ describe("issue repository", () => {
     ]);
   });
 
+  it("keeps archived workflows assigned but blocks new production runs", () => {
+    const initial = createIssueRepositoryState(baseWorkspaceRepository.read());
+    const workflowId = initial.issues.find(({ id }) => id === "issue-bas-101")!.workflowId!;
+    const archivedState = {
+      ...initial,
+      workflowExecutableById: { ...initial.workflowExecutableById, [workflowId]: false },
+    };
+
+    const queued = queueIssues(archivedState, ["issue-bas-101"]);
+
+    expect(queued.queuedIds).toEqual([]);
+    expect(queued.rejected).toEqual([
+      {
+        issueId: "issue-bas-101",
+        reason: "Restore the archived workflow assigned to BAS-101 before queueing it.",
+      },
+    ]);
+  });
+
+  it("keeps archived workflows assigned but blocks new production runs", () => {
+    const initial = createIssueRepositoryState(baseWorkspaceRepository.read());
+    const workflowId = initial.issues.find(({ id }) => id === "issue-bas-101")!.workflowId!;
+    const archivedState = {
+      ...initial,
+      workflowExecutableById: { ...initial.workflowExecutableById, [workflowId]: false },
+    };
+
+    const queued = queueIssues(archivedState, ["issue-bas-101"]);
+
+    expect(queued.queuedIds).toEqual([]);
+    expect(queued.rejected).toEqual([
+      {
+        issueId: "issue-bas-101",
+        reason: "Restore the archived workflow assigned to BAS-101 before queueing it.",
+      },
+    ]);
+  });
+
   it("queues only ready issues with workflows and creates deterministic run context", () => {
     const initial = createIssueRepositoryState(baseWorkspaceRepository.read());
     const result = queueIssues(initial, ["issue-bas-101", "issue-bas-103", "issue-bas-105"]);
@@ -251,7 +289,7 @@ describe("issue repository", () => {
       cycle: "Cycle 04",
       assignee: "Luke",
       branch: "codex/bas-103-retry-controls",
-      dependencies: ["issue-bas-101"],
+      dependencies: ["issue-bas-101", "issue-bas-103", "issue-rly-1", "missing-issue"],
     });
 
     expect(updated).toMatchObject({

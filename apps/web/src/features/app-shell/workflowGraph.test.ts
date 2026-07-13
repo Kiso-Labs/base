@@ -184,6 +184,70 @@ describe("workflow graph", () => {
     });
   });
 
+  it("enforces connection invariants below the canvas adapter", () => {
+    const secondAgent: WorkflowNode = {
+      ...agentNode,
+      id: "agent-implement",
+      name: "Implement issue",
+      position: { x: 720, y: 180 },
+    };
+    const initial = createWorkflowDraft("workflow-safe-connections", {
+      name: "Safe connections",
+      description: "Reject invalid control flow at the domain boundary.",
+      graph: {
+        nodes: [triggerNode, agentNode, secondAgent],
+        edges: [
+          {
+            id: "edge-trigger-plan",
+            kind: "success",
+            sourceNodeId: triggerNode.id,
+            targetNodeId: agentNode.id,
+          },
+          {
+            id: "edge-plan-implement",
+            kind: "success",
+            sourceNodeId: agentNode.id,
+            targetNodeId: secondAgent.id,
+          },
+        ],
+      },
+    });
+
+    expect(
+      applyWorkflowCommand(initial, {
+        type: "edge.connect",
+        edge: {
+          id: "edge-trigger-implement",
+          kind: "success",
+          sourceNodeId: triggerNode.id,
+          targetNodeId: secondAgent.id,
+        },
+      }),
+    ).toMatchObject({ accepted: false, reason: "The success output is already connected." });
+    expect(
+      applyWorkflowCommand(initial, {
+        type: "edge.connect",
+        edge: {
+          id: "edge-implement-trigger",
+          kind: "failure",
+          sourceNodeId: secondAgent.id,
+          targetNodeId: triggerNode.id,
+        },
+      }),
+    ).toMatchObject({ accepted: false, reason: "Trigger nodes cannot have incoming edges." });
+    expect(
+      applyWorkflowCommand(initial, {
+        type: "edge.connect",
+        edge: {
+          id: "edge-implement-plan",
+          kind: "failure",
+          sourceNodeId: secondAgent.id,
+          targetNodeId: agentNode.id,
+        },
+      }),
+    ).toMatchObject({ accepted: false, reason: "Workflow connections cannot create a cycle." });
+  });
+
   it("updates node configuration, batches movement, and removes edges", () => {
     const edge = {
       id: "edge-trigger-plan",
@@ -318,6 +382,51 @@ describe("workflow graph", () => {
     ]);
   });
 
+  it("rejects reused outputs and duplicate normalized branch labels", () => {
+    const valid = createPublishableDraft();
+    const branch = valid.content.graph.nodes.find(
+      (node): node is Extract<WorkflowNode, { readonly kind: "branch" }> => node.kind === "branch",
+    )!;
+    const invalidBranch: WorkflowNode = {
+      ...branch,
+      config: {
+        cases: [
+          ...branch.config.cases,
+          { id: "changes-again", label: " changes REQUESTED ", expression: "review.retry" },
+        ],
+      },
+    };
+    const draft = createWorkflowDraft("workflow-duplicate-outputs", {
+      ...valid.content,
+      graph: {
+        nodes: valid.content.graph.nodes.map((node) =>
+          node.id === invalidBranch.id ? invalidBranch : node,
+        ),
+        edges: [
+          ...valid.content.graph.edges,
+          {
+            id: "e9",
+            kind: "success",
+            sourceNodeId: triggerNode.id,
+            targetNodeId: "hook-notify",
+          },
+          {
+            id: "e10",
+            kind: "branch",
+            caseId: "changes-again",
+            sourceNodeId: branch.id,
+            targetNodeId: "hook-notify",
+          },
+        ],
+      },
+    });
+
+    expect(validateWorkflowDraft(draft).diagnostics.map(({ code }) => code)).toEqual([
+      "branch-config-invalid",
+      "edge-output-duplicate",
+    ]);
+  });
+
   it("keeps bounded semantic history and treats undo and redo as new revisions", () => {
     const initial = createPublishableDraft();
     const history = createWorkflowHistory(initial);
@@ -347,6 +456,36 @@ describe("workflow graph", () => {
     expect(redone.changed).toBe(true);
     expect(redone.history.present.revision).toBe(3);
     expect(redone.history.present.content.graph.nodes[0]?.position).toEqual({ x: 90, y: 90 });
+  });
+
+  it("records a batched canvas gesture as one undo checkpoint", () => {
+    const initial = createWorkflowDraft("workflow-batched-gesture", {
+      name: "Batched gesture",
+      description: "Insert a connected step atomically.",
+      graph: { nodes: [triggerNode], edges: [] },
+    });
+    const history = createWorkflowHistory(initial);
+    const inserted = applyWorkflowHistoryCommand(history, {
+      type: "batch",
+      commands: [
+        { type: "node.add", node: agentNode },
+        {
+          type: "edge.connect",
+          edge: {
+            id: "edge-trigger-agent",
+            kind: "success",
+            sourceNodeId: triggerNode.id,
+            targetNodeId: agentNode.id,
+          },
+        },
+      ],
+    });
+
+    expect(inserted).toMatchObject({ accepted: true, changed: true });
+    expect(inserted.history.past).toHaveLength(1);
+    expect(inserted.history.present.revision).toBe(1);
+    const undone = undoWorkflowHistory(inserted.history);
+    expect(undone.history.present.content.graph).toEqual({ nodes: [triggerNode], edges: [] });
   });
 
   it("publishes immutable, incrementing versions and rejects unchanged drafts", () => {
