@@ -238,10 +238,12 @@ describe("issue repository", () => {
   it("creates dynamic built-in views for every project without crossing project boundaries", () => {
     const snapshot = baseWorkspaceRepository.read();
     const views = createDefaultIssueViews(snapshot.projects);
+    const desktopAll = views.find(({ id }) => id === "view-project-base-desktop-all");
     const desktopReady = views.find(({ id }) => id === "view-project-base-desktop-ready");
     const relayReady = views.find(({ id }) => id === "view-project-base-relay-ready");
 
     expect(views.filter(({ projectId }) => projectId === "project-base-desktop")).toHaveLength(4);
+    expect(desktopAll).toMatchObject({ groupBy: "status", layout: "list" });
     expect(
       resolveIssueView(snapshot.issues, desktopReady!).map(({ identifier }) => identifier),
     ).toEqual(["BAS-101"]);

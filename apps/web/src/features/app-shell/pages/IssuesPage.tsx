@@ -1,8 +1,21 @@
 import {
   ArrowUpDownIcon,
+  CircleCheckIcon,
+  CircleDashedIcon,
+  CircleDotDashedIcon,
+  CircleIcon,
+  CirclePauseIcon,
+  CircleSlashIcon,
+  EllipsisIcon,
+  Layers3Icon,
+  LoaderCircleIcon,
   MoreHorizontalIcon,
+  OctagonXIcon,
   PlayIcon,
   PlusIcon,
+  SignalHighIcon,
+  SignalLowIcon,
+  SignalMediumIcon,
   WorkflowIcon,
   XIcon,
 } from "lucide-react";
@@ -11,27 +24,40 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
+import { cn } from "~/lib/utils";
 
-import { IssueStatusBadge, PriorityLabel } from "../BaseEntityPills";
 import { BasePageShell } from "../BasePageShell";
 import { useBaseWorkspace } from "../BaseWorkspaceContext";
 import { IssueCreateDialog } from "../IssueCreateDialog";
 import { IssueInspector } from "../IssueInspector";
-import { DEFAULT_ISSUE_FILTERS, filterIssues, groupIssues } from "../issueRepository";
+import {
+  DEFAULT_ISSUE_FILTERS,
+  filterIssues,
+  groupIssues,
+  type IssueViewGroupBy,
+} from "../issueRepository";
 import { useIssueWorkspaceStore } from "../issueWorkspaceStore";
 import { ProjectIssueViewBar } from "../ProjectIssueViewBar";
 import { QueueIssuesDialog } from "../QueueIssuesDialog";
-import type { BaseIssueSummary, BaseWorkflowSummary } from "../workspaceRepository";
+import type {
+  BaseIssueStatus,
+  BaseIssueSummary,
+  BasePriority,
+  BaseWorkflowSummary,
+} from "../workspaceRepository";
 
 const PRIORITY_ORDER = { Urgent: 0, High: 1, Medium: 2, Low: 3, None: 4 } as const;
+
+const STATUS_LABELS: Readonly<Record<BaseIssueStatus, string>> = {
+  Backlog: "Backlog",
+  Planned: "Planned",
+  Ready: "Ready",
+  Queued: "Queued",
+  Running: "In progress",
+  Blocked: "Blocked",
+  Review: "In review",
+  Done: "Done",
+};
 
 function RunStateBadge({ state }: { readonly state: BaseIssueSummary["runState"] }) {
   const presentation = {
@@ -46,6 +72,90 @@ function RunStateBadge({ state }: { readonly state: BaseIssueSummary["runState"]
       <span className="size-1 rounded-full bg-current opacity-70" />
       {presentation.label}
     </Badge>
+  );
+}
+
+function IssueStatusIcon({ status }: { readonly status: BaseIssueStatus }) {
+  const Icon =
+    status === "Backlog"
+      ? CircleDashedIcon
+      : status === "Planned"
+        ? CircleDotDashedIcon
+        : status === "Ready"
+          ? CircleIcon
+          : status === "Queued"
+            ? CirclePauseIcon
+            : status === "Running"
+              ? LoaderCircleIcon
+              : status === "Blocked"
+                ? OctagonXIcon
+                : status === "Review"
+                  ? CircleSlashIcon
+                  : CircleCheckIcon;
+
+  return (
+    <Icon
+      aria-label={STATUS_LABELS[status]}
+      className={cn(
+        "size-4 shrink-0 stroke-[2.25]",
+        (status === "Backlog" || status === "Planned" || status === "Ready") &&
+          "text-muted-foreground/60",
+        status === "Queued" && "text-warning",
+        status === "Running" && "text-info",
+        status === "Blocked" && "text-destructive-foreground",
+        (status === "Review" || status === "Done") && "text-success",
+      )}
+    />
+  );
+}
+
+function PriorityIcon({ priority }: { readonly priority: BasePriority }) {
+  const Icon =
+    priority === "Urgent" || priority === "High"
+      ? SignalHighIcon
+      : priority === "Medium"
+        ? SignalMediumIcon
+        : priority === "Low"
+          ? SignalLowIcon
+          : EllipsisIcon;
+
+  return (
+    <span
+      aria-label={`${priority} priority`}
+      className={cn(
+        "flex size-4 shrink-0 items-center justify-center",
+        priority === "Urgent" && "text-destructive-foreground",
+        priority === "High" && "text-warning-foreground",
+        priority === "Medium" && "text-foreground/60",
+        (priority === "Low" || priority === "None") && "text-muted-foreground/55",
+      )}
+    >
+      <Icon aria-hidden="true" className="size-4" />
+    </span>
+  );
+}
+
+function IssueGroupHeader({
+  count,
+  groupBy,
+  label,
+}: {
+  readonly count: number;
+  readonly groupBy: IssueViewGroupBy;
+  readonly label: string;
+}) {
+  return (
+    <div className="flex h-10 items-center gap-2 border-y border-border/55 bg-muted/20 px-3.5 first:border-t-0">
+      {groupBy === "status" ? (
+        <IssueStatusIcon status={label as BaseIssueStatus} />
+      ) : (
+        <Layers3Icon aria-hidden="true" className="size-4 text-muted-foreground/55" />
+      )}
+      <span className="text-xs font-medium text-foreground/85">
+        {groupBy === "status" ? STATUS_LABELS[label as BaseIssueStatus] : label}
+      </span>
+      <span className="font-mono text-[11px] text-muted-foreground/65">{count}</span>
+    </div>
   );
 }
 
@@ -65,81 +175,76 @@ function IssueRow({
   const assigneeInitial = issue.assignee === "Unassigned" ? "—" : issue.assignee.slice(0, 1);
 
   return (
-    <TableRow className="group h-11" data-selected={selected || undefined}>
-      <TableCell className="w-9 pl-3.5">
+    <div
+      className="group grid h-12 grid-cols-[2rem_1.25rem_minmax(13rem,1fr)_auto] items-center border-b border-border/45 px-2 transition-colors last:border-b-0 hover:bg-muted/30 data-[selected]:bg-primary/10 data-[selected]:hover:bg-primary/[0.13]"
+      data-selected={selected || undefined}
+      role="listitem"
+    >
+      <div className="flex items-center justify-center">
         <Checkbox
           aria-label={`Select ${issue.identifier}`}
           checked={selected}
+          className={cn(
+            "transition-opacity",
+            selected
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+          )}
           onCheckedChange={(checked) => onSelectedChange(checked === true)}
         />
-      </TableCell>
-      <TableCell className="min-w-[340px] max-w-[540px] whitespace-normal py-1.5">
+      </div>
+      <PriorityIcon priority={issue.priority} />
+      <div className="flex min-w-0 items-center">
         <button
-          className="block min-w-0 max-w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="grid min-w-0 flex-1 grid-cols-[4.75rem_1.25rem_minmax(0,1fr)] items-center gap-1 text-left outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring"
           data-issue-id={issue.id}
           onClick={onOpen}
           type="button"
         >
-          <span className="flex items-center gap-2">
-            <span className="shrink-0 font-mono text-[10px] font-medium text-muted-foreground">
-              {issue.identifier}
-            </span>
-            <span className="truncate text-xs font-medium text-foreground/90">{issue.title}</span>
+          <span className="truncate font-mono text-[11px] font-medium text-muted-foreground/75">
+            {issue.identifier}
           </span>
-          <span className="mt-0.5 flex items-center gap-1.5 text-[9px] text-muted-foreground/65">
-            {issue.module}
-            <span aria-hidden="true">·</span>
-            {issue.cycle}
-          </span>
+          <IssueStatusIcon status={issue.status} />
+          <span className="truncate text-[13px] font-medium text-foreground/90">{issue.title}</span>
         </button>
-      </TableCell>
-      <TableCell>
-        <IssueStatusBadge status={issue.status} />
-      </TableCell>
-      <TableCell>
-        <PriorityLabel priority={issue.priority} />
-      </TableCell>
-      <TableCell className="min-w-40">
-        <div className="flex items-center gap-1">
-          {issue.labels.slice(0, 3).map((label) => (
-            <Badge className="font-normal" key={label} size="sm" variant="outline">
-              {label}
-            </Badge>
-          ))}
-        </div>
-      </TableCell>
-      <TableCell className="min-w-36">
-        <span className="flex items-center gap-2 text-[11px] text-foreground/80">
-          <span className="flex size-5 items-center justify-center rounded-full border border-border/70 bg-background text-[9px] font-semibold text-muted-foreground">
-            {assigneeInitial}
-          </span>
-          <span className="truncate">{issue.assignee}</span>
-        </span>
-      </TableCell>
-      <TableCell className="min-w-48 max-w-64">
+      </div>
+
+      <div className="ml-3 flex min-w-0 items-center justify-end gap-1.5">
+        {issue.runState !== "idle" ? <RunStateBadge state={issue.runState} /> : null}
+        {issue.labels.slice(0, 1).map((label) => (
+          <Badge
+            className="hidden max-w-28 truncate rounded-md bg-background/40 font-normal lg:inline-flex"
+            key={label}
+            size="sm"
+            variant="outline"
+          >
+            {label}
+          </Badge>
+        ))}
         {workflow ? (
           <button
-            className="flex min-w-0 items-center gap-1.5 text-left text-[11px] text-foreground/75 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="hidden max-w-36 items-center gap-1.5 rounded-md border border-border/60 bg-background/35 px-2 py-1 text-left text-[10px] text-muted-foreground outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring xl:flex"
             onClick={onOpen}
             type="button"
           >
-            <WorkflowIcon aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
+            <WorkflowIcon aria-hidden="true" className="size-3 shrink-0" />
             <span className="truncate">{workflow.name}</span>
           </button>
-        ) : (
-          <Button className="h-auto p-0 text-[11px]" onClick={onOpen} size="xs" variant="link">
-            Attach workflow
-          </Button>
-        )}
-      </TableCell>
-      <TableCell>
-        <RunStateBadge state={issue.runState} />
-      </TableCell>
-      <TableCell className="pr-3.5 text-right">
-        <div className="flex items-center justify-end gap-2">
-          <span className="text-[10px] text-muted-foreground">{issue.updatedAt}</span>
+        ) : null}
+        <span
+          aria-label={issue.assignee}
+          className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background text-[9px] font-semibold text-muted-foreground"
+          title={issue.assignee}
+        >
+          {assigneeInitial}
+        </span>
+        <span className="hidden w-12 text-right text-[10px] text-muted-foreground/70 sm:block">
+          {issue.updatedAt}
+        </span>
+        <div className="w-6">
           <Button
             aria-label={`Open ${issue.identifier}`}
+            className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
             onClick={onOpen}
             size="icon-xs"
             variant="ghost"
@@ -147,8 +252,8 @@ function IssueRow({
             <MoreHorizontalIcon />
           </Button>
         </div>
-      </TableCell>
-    </TableRow>
+      </div>
+    </div>
   );
 }
 
@@ -159,7 +264,7 @@ export function IssuesPage() {
   );
   const selectedIssueIds = useIssueWorkspaceStore((state) => state.selectedIssueIds);
   const groupBy = useIssueWorkspaceStore(
-    (state) => state.groupByByProject[selectedProject.id] ?? "none",
+    (state) => state.groupByByProject[selectedProject.id] ?? "status",
   );
   const toggleIssueSelection = useIssueWorkspaceStore((state) => state.toggleIssueSelection);
   const setIssueSelection = useIssueWorkspaceStore((state) => state.setIssueSelection);
@@ -199,18 +304,12 @@ export function IssuesPage() {
   return (
     <>
       <BasePageShell
-        actions={
-          <Button onClick={() => setCreateOpen(true)} size="sm">
-            <PlusIcon />
-            New issue
-            <span className="font-mono text-[9px] opacity-65">C</span>
-          </Button>
-        }
         density="workspace"
         description="Plan work, attach reusable workflows, and keep execution history inside this project."
+        showIntro={false}
         title="Issues"
       >
-        <div className="overflow-hidden rounded-lg border border-border/60 bg-background shadow-xs">
+        <div className="overflow-hidden rounded-lg border border-border/70 bg-background shadow-xs">
           <ProjectIssueViewBar
             layout="list"
             onRunView={(issueIds) => {
@@ -220,7 +319,13 @@ export function IssuesPage() {
             }}
             visibleIssueIds={visibleIssueIds}
           />
-          <div className="flex items-center justify-end border-b border-border/60 px-3.5 py-1.5">
+          <div className="flex h-9 items-center justify-end gap-1 border-b border-border/60 px-2">
+            <Checkbox
+              aria-label="Select all visible issues"
+              checked={allVisibleSelected}
+              className="mr-1"
+              onCheckedChange={(checked) => setIssueSelection(visibleIssueIds, checked === true)}
+            />
             <Button
               onClick={() => setSort((current) => (current === "updated" ? "priority" : "updated"))}
               size="xs"
@@ -228,6 +333,11 @@ export function IssuesPage() {
             >
               <ArrowUpDownIcon />
               Sort: {sort === "updated" ? "Updated" : "Priority"}
+            </Button>
+            <Button onClick={() => setCreateOpen(true)} size="xs">
+              <PlusIcon />
+              New issue
+              <span className="font-mono text-[9px] opacity-65">C</span>
             </Button>
           </div>
 
@@ -245,85 +355,44 @@ export function IssuesPage() {
             </div>
           ) : null}
 
-          <Table className="min-w-[1080px]">
-            <TableHeader className="bg-muted/20">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-9 pl-3.5">
-                  <Checkbox
-                    aria-label="Select all visible issues"
-                    checked={allVisibleSelected}
-                    onCheckedChange={(checked) =>
-                      setIssueSelection(visibleIssueIds, checked === true)
+          <div role="list">
+            {visibleGroups.map((group) => (
+              <Fragment key={group.key}>
+                {groupBy !== "none" ? (
+                  <IssueGroupHeader
+                    count={group.issues.length}
+                    groupBy={groupBy}
+                    label={
+                      groupBy === "workflow"
+                        ? (workflowsById.get(group.key)?.name ?? group.key)
+                        : group.key
                     }
                   />
-                </TableHead>
-                {[
-                  "Issue",
-                  "Status",
-                  "Priority",
-                  "Labels",
-                  "Assignee",
-                  "Workflow",
-                  "Run",
-                  "Updated",
-                ].map((heading) => (
-                  <TableHead
-                    className={
-                      heading === "Updated"
-                        ? "pr-3.5 text-right text-[10px] uppercase tracking-[0.08em] text-muted-foreground"
-                        : "text-[10px] uppercase tracking-[0.08em] text-muted-foreground"
-                    }
-                    key={heading}
-                  >
-                    {heading}
-                  </TableHead>
+                ) : null}
+                {group.issues.map((issue) => (
+                  <IssueRow
+                    issue={issue}
+                    key={issue.id}
+                    onOpen={() => selectIssue(issue.id)}
+                    onSelectedChange={(selected) => toggleIssueSelection(issue.id, selected)}
+                    selected={selectedSet.has(issue.id)}
+                    workflow={issue.workflowId ? workflowsById.get(issue.workflowId) : undefined}
+                  />
                 ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visibleGroups.map((group) => (
-                <Fragment key={group.key}>
-                  {groupBy !== "none" ? (
-                    <TableRow className="h-8 bg-muted/25 hover:bg-muted/25">
-                      <TableCell className="px-3.5" colSpan={9}>
-                        <span className="text-[10px] font-semibold text-foreground/75">
-                          {groupBy === "workflow"
-                            ? (workflowsById.get(group.key)?.name ?? group.key)
-                            : group.key}
-                        </span>
-                        <span className="ml-2 font-mono text-[9px] text-muted-foreground">
-                          {group.issues.length}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
-                  {group.issues.map((issue) => (
-                    <IssueRow
-                      issue={issue}
-                      key={issue.id}
-                      onOpen={() => selectIssue(issue.id)}
-                      onSelectedChange={(selected) => toggleIssueSelection(issue.id, selected)}
-                      selected={selectedSet.has(issue.id)}
-                      workflow={issue.workflowId ? workflowsById.get(issue.workflowId) : undefined}
-                    />
-                  ))}
-                </Fragment>
-              ))}
-              {visibleIssues.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell className="h-32 text-center text-xs text-muted-foreground" colSpan={9}>
-                    No issues match the current project filters.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+              </Fragment>
+            ))}
+            {visibleIssues.length === 0 ? (
+              <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
+                No issues match the current project filters.
+              </div>
+            ) : null}
+          </div>
 
           <div className="flex items-center justify-between border-t border-border/60 px-3.5 py-2 text-[10px] text-muted-foreground">
             <span>
               Showing {visibleIssues.length} of {projectIssues.length} project issues
             </span>
-            <span>Click a row to open details · C creates an issue</span>
+            <span>Click an issue to open details · C creates an issue</span>
           </div>
         </div>
       </BasePageShell>

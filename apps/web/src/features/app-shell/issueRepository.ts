@@ -306,7 +306,7 @@ export function createDefaultIssueViews(
       kind: "system" as const,
       name: "All issues",
       layout: "list" as const,
-      groupBy: "none" as const,
+      groupBy: "status" as const,
       filters: DEFAULT_ISSUE_FILTERS,
     },
     {

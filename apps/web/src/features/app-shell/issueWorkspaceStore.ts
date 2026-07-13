@@ -82,7 +82,7 @@ const initialFiltersByProject: Readonly<Record<string, IssueFilters>> = Object.f
   initialSnapshot.projects.map(({ id }) => [id, DEFAULT_ISSUE_FILTERS]),
 );
 const initialGroupByByProject: Readonly<Record<string, IssueViewGroupBy>> = Object.fromEntries(
-  initialSnapshot.projects.map(({ id }) => [id, "none" as const]),
+  initialSnapshot.projects.map(({ id }) => [id, "status" as const]),
 );
 const initialActiveViewIdByProject: Readonly<Record<string, string | null>> = Object.fromEntries(
   initialSnapshot.projects.map(({ id }) => [id, `view-${id}-all`]),
