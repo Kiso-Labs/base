@@ -90,7 +90,7 @@ function RunRow({
               {workflow.name}
             </Button>
             <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/65">
-              v{workflow.version}
+              immutable v{run.workflowVersion}
             </p>
           </div>
         ) : (
