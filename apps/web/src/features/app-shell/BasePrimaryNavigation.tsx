@@ -60,14 +60,16 @@ const TEAM_NAVIGATION_ITEMS = [
   VIEWS_NAVIGATION_ITEM,
 ] as const;
 
-const BUILD_NAVIGATION_ITEMS = [
+const WORKSPACE_MORE_NAVIGATION_ITEMS = [
   navigationItem("workflows"),
   navigationItem("runs"),
   navigationItem("repository"),
   navigationItem("settings"),
 ] as const;
 
-const BUILD_NAVIGATION_IDS = new Set<BaseNavigationId>(BUILD_NAVIGATION_ITEMS.map(({ id }) => id));
+const WORKSPACE_MORE_NAVIGATION_IDS = new Set<BaseNavigationId>(
+  WORKSPACE_MORE_NAVIGATION_ITEMS.map(({ id }) => id),
+);
 
 export function BasePrimaryNavigation() {
   const pathname = useLocation({ select: (location) => location.pathname });
@@ -135,7 +137,7 @@ export function BasePrimaryNavigation() {
               <SidebarMenuButton
                 aria-expanded={moreOpen}
                 className="h-7 gap-2 px-2 text-[12px]"
-                isActive={Boolean(activeItem && BUILD_NAVIGATION_IDS.has(activeItem.id))}
+                isActive={Boolean(activeItem && WORKSPACE_MORE_NAVIGATION_IDS.has(activeItem.id))}
                 onClick={() => setMoreOpen((open) => !open)}
                 size="sm"
                 title={moreOpen ? "Hide more workspace links" : "Show more workspace links"}
@@ -151,32 +153,13 @@ export function BasePrimaryNavigation() {
           </SidebarMenu>
 
           {moreOpen ? (
-            <SidebarMenu className="mt-0.5 pl-5">
-              {BUILD_NAVIGATION_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const isActive = item.id === activeItem?.id;
-                const badge = badgeById[item.id];
-                return (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton
-                      className="h-7 gap-2 rounded-lg px-2 text-[13px]"
-                      isActive={isActive}
-                      render={<Link onClick={closeMobileSidebar} to={item.to} />}
-                      size="sm"
-                      title={item.description}
-                    >
-                      <Icon className="size-3.5 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                      {badge ? (
-                        <span className="min-w-4 rounded-sm bg-muted px-1 text-center font-mono text-[9px] leading-4 text-muted-foreground group-data-[active=true]/menu-button:bg-primary/12 group-data-[active=true]/menu-button:text-primary">
-                          {badge}
-                        </span>
-                      ) : null}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
+            <NavigationGroup
+              activeItemId={activeItem?.id ?? null}
+              badgeById={badgeById}
+              className="mt-0.5 pl-5"
+              items={WORKSPACE_MORE_NAVIGATION_ITEMS}
+              onNavigate={closeMobileSidebar}
+            />
           ) : null}
         </div>
 
