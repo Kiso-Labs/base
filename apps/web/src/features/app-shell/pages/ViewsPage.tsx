@@ -4,13 +4,11 @@ import {
   CalendarDaysIcon,
   ChevronDownIcon,
   CircleIcon,
-  FilterIcon,
   Layers3Icon,
   LinkIcon,
   MegaphoneIcon,
   MoreHorizontalIcon,
   PlusIcon,
-  Settings2Icon,
   SlidersHorizontalIcon,
   StarIcon,
   UsersIcon,
@@ -20,26 +18,25 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { Input } from "~/components/ui/input";
-import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
 
 import { BasePageShell } from "../BasePageShell";
 import { useBaseWorkspace } from "../BaseWorkspaceContext";
-import { IssueFilterBar } from "../IssueFilterBar";
 import {
   DEFAULT_ISSUE_FILTERS,
-  ISSUE_VIEW_GROUP_OPTIONS,
   filterIssues,
   groupIssues,
-  hasActiveIssueFilters,
   issueViewPath,
   type BaseIssueView,
+  type IssueGroup,
   type IssueViewGroupBy,
   type IssueViewLayout,
 } from "../issueRepository";
 import { useIssueWorkspaceStore } from "../issueWorkspaceStore";
-import type { BaseIssueStatus, BaseIssueSummary } from "../workspaceRepository";
+import { IssueViewFilterPopover } from "../IssueViewFilterPopover";
+import { ViewDisplaySettingsPopover } from "../ViewDisplaySettingsPopover";
+import { type BaseIssueStatus, type BaseIssueSummary } from "../workspaceRepository";
 
 type ViewCollection = "issues" | "projects";
 type ViewsMode = "create" | "list";
@@ -290,62 +287,40 @@ function PreviewIssueRow({ issue }: { readonly issue: BaseIssueSummary }) {
   );
 }
 
-function ViewDisplaySettings({
-  groupBy,
-  layout,
-  onGroupByChange,
-  onLayoutChange,
-}: {
-  readonly groupBy: IssueViewGroupBy;
-  readonly layout: IssueViewLayout;
-  readonly onGroupByChange: (groupBy: IssueViewGroupBy) => void;
-  readonly onLayoutChange: (layout: IssueViewLayout) => void;
-}) {
+function PreviewBoard({ groups }: { readonly groups: readonly IssueGroup[] }) {
   return (
-    <Popover>
-      <PopoverTrigger
-        render={<Button aria-label="View display settings" size="icon-sm" variant="ghost" />}
-      >
-        <Settings2Icon className="size-3.5" />
-      </PopoverTrigger>
-      <PopoverPopup align="end" className="w-56" sideOffset={6}>
-        <div className="space-y-4">
-          <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              Layout
-            </p>
-            <div className="mt-2 grid grid-cols-2 gap-1">
-              {(["list", "board"] as const).map((value) => (
-                <Button
-                  key={value}
-                  onClick={() => onLayoutChange(value)}
-                  size="xs"
-                  variant={layout === value ? "secondary" : "ghost"}
-                >
-                  <span className="capitalize">{value}</span>
-                </Button>
-              ))}
-            </div>
+    <div
+      className="flex min-h-full items-start gap-3 overflow-x-auto p-3"
+      aria-label="Board preview"
+    >
+      {groups.map((group) => (
+        <section className="w-64 shrink-0" key={group.key}>
+          <div className="flex h-9 items-center gap-2 px-1 text-sm font-medium">
+            <CircleIcon className="size-4 text-muted-foreground" />
+            <span>{group.key}</span>
+            <span className="font-mono text-xs text-muted-foreground">{group.issues.length}</span>
+            <PlusIcon className="ml-auto size-3.5 text-muted-foreground" />
           </div>
-          <label className="block">
-            <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              Group by
-            </span>
-            <select
-              className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
-              onChange={(event) => onGroupByChange(event.currentTarget.value as IssueViewGroupBy)}
-              value={groupBy}
-            >
-              {ISSUE_VIEW_GROUP_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </PopoverPopup>
-    </Popover>
+          <div className="space-y-2">
+            {group.issues.map((issue) => (
+              <article
+                className="rounded-lg border border-border/55 bg-muted/20 p-3 text-sm shadow-xs"
+                key={issue.id}
+              >
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {issue.identifier}
+                </span>
+                <p className="mt-1 font-medium text-foreground/90">{issue.title}</p>
+                <div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>{issue.priority}</span>
+                  <span>{issue.assignee}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
   );
 }
 
@@ -359,8 +334,7 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
   const activateView = useIssueWorkspaceStore((state) => state.activateView);
   const [collection, setCollection] = useState<ViewCollection>("issues");
   const [description, setDescription] = useState("");
-  const [filtersVisible, setFiltersVisible] = useState(false);
-  const [groupBy, setGroupBy] = useState<IssueViewGroupBy>("none");
+  const [groupBy, setGroupBy] = useState<IssueViewGroupBy>("status");
   const [layout, setLayout] = useState<IssueViewLayout>("list");
   const [name, setName] = useState("All issues");
   const visibleIssues = useMemo(
@@ -371,7 +345,6 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
     () => groupIssues(visibleIssues, layout === "board" ? "status" : groupBy),
     [groupBy, layout, visibleIssues],
   );
-  const activeFilters = hasActiveIssueFilters(filters);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -470,22 +443,8 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
             <div className="flex min-h-12 items-center justify-between border-t border-border/45 px-3">
               <CollectionTabs collection={collection} onCollectionChange={setCollection} />
               <div className="flex items-center gap-1">
-                <Button
-                  aria-expanded={filtersVisible}
-                  className="rounded-full"
-                  onClick={() => setFiltersVisible((current) => !current)}
-                  size="icon-sm"
-                  type="button"
-                  variant={filtersVisible || activeFilters ? "secondary" : "ghost"}
-                >
-                  <span className="relative">
-                    <FilterIcon className="size-3.5" />
-                    {activeFilters ? (
-                      <span className="absolute -right-1 -top-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </span>
-                </Button>
-                <ViewDisplaySettings
+                <IssueViewFilterPopover />
+                <ViewDisplaySettingsPopover
                   groupBy={groupBy}
                   layout={layout}
                   onGroupByChange={setGroupBy}
@@ -493,35 +452,34 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
                 />
               </div>
             </div>
-            {filtersVisible ? (
-              <div className="border-t border-border/45 px-3 py-2">
-                <IssueFilterBar />
-              </div>
-            ) : null}
           </div>
 
           {collection === "issues" ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {previewGroups.map((group) => (
-                <div key={group.key}>
-                  <div className="flex h-11 items-center gap-2 bg-muted/25 px-4">
-                    <ChevronDownIcon className="size-3.5 text-muted-foreground/60" />
-                    <CircleIcon className="size-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">
-                      {group.key === "All issues" ? "Todo" : group.key}
-                    </span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {group.issues.length}
-                    </span>
-                    <PlusIcon className="ml-auto size-3.5 text-muted-foreground" />
+              {layout === "board" ? (
+                <PreviewBoard groups={previewGroups} />
+              ) : (
+                previewGroups.map((group) => (
+                  <div key={group.key}>
+                    <div className="flex h-11 items-center gap-2 bg-muted/25 px-4">
+                      <ChevronDownIcon className="size-3.5 text-muted-foreground/60" />
+                      <CircleIcon className="size-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">
+                        {group.key === "All issues" ? "Todo" : group.key}
+                      </span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {group.issues.length}
+                      </span>
+                      <PlusIcon className="ml-auto size-3.5 text-muted-foreground" />
+                    </div>
+                    <div role="list" aria-label={`${group.key} issue preview`}>
+                      {group.issues.map((issue) => (
+                        <PreviewIssueRow issue={issue} key={issue.id} />
+                      ))}
+                    </div>
                   </div>
-                  <div role="list" aria-label={`${group.key} issue preview`}>
-                    {group.issues.map((issue) => (
-                      <PreviewIssueRow issue={issue} key={issue.id} />
-                    ))}
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
               {visibleIssues.length === 0 ? (
                 <div className="flex min-h-36 items-center justify-center px-6 text-center text-xs text-muted-foreground">
                   No issues match the current filters.
