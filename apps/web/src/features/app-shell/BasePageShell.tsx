@@ -25,18 +25,21 @@ export function BasePageShell({
   children,
   description,
   density = "default",
+  showIntro,
   title,
 }: {
   readonly actions?: ReactNode;
   readonly children: ReactNode;
   readonly description: string;
-  readonly density?: "default" | "workspace";
+  readonly density?: "canvas" | "default" | "workspace";
+  readonly showIntro?: boolean;
   readonly title: string;
 }) {
   const openCommandPalette = useOpenCommandPalette();
   const commandPaletteShortcutLabel = useCommandPaletteShortcutLabel();
   const { selectedProject, selectedRepository, snapshot } = useBaseWorkspace();
   const activeRunCount = selectActiveRunCount(snapshot, selectedProject.id);
+  const shouldShowIntro = showIntro ?? density !== "canvas";
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
@@ -130,45 +133,66 @@ export function BasePageShell({
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main
+          className={cn(
+            "min-h-0 flex-1",
+            density === "canvas" ? "overflow-hidden" : "overflow-y-auto",
+          )}
+        >
           <div
             className={cn(
               "mx-auto flex w-full flex-col px-4",
-              density === "workspace"
-                ? "max-w-none py-3 sm:px-4 sm:py-4"
-                : "max-w-[1600px] py-5 sm:px-6 sm:py-6",
+              density === "canvas"
+                ? "h-full min-h-0 max-w-none p-0"
+                : density === "workspace"
+                  ? "max-w-none py-3 sm:px-4 sm:py-4"
+                  : "max-w-[1600px] py-5 sm:px-6 sm:py-6",
             )}
           >
+            {shouldShowIntro ? (
+              <div
+                className={cn(
+                  "flex flex-wrap items-start justify-between gap-4 border-b border-border/60",
+                  density === "workspace" ? "pb-3" : "pb-5",
+                )}
+              >
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60">
+                    {snapshot.workspace.name} / {selectedProject.identifier}
+                  </p>
+                  <h1
+                    className={cn(
+                      "font-semibold tracking-[-0.02em] text-foreground",
+                      density === "workspace" ? "mt-1 text-base" : "mt-1.5 text-xl",
+                    )}
+                  >
+                    {title}
+                  </h1>
+                  <p
+                    className={cn(
+                      "mt-1 max-w-3xl text-muted-foreground",
+                      density === "workspace" ? "text-xs leading-4" : "text-sm leading-5",
+                    )}
+                  >
+                    {description}
+                  </p>
+                </div>
+                {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+              </div>
+            ) : (
+              <div className="sr-only">
+                <h1>{title}</h1>
+                <p>{description}</p>
+              </div>
+            )}
             <div
               className={cn(
-                "flex flex-wrap items-start justify-between gap-4 border-b border-border/60",
-                density === "workspace" ? "pb-3" : "pb-5",
+                shouldShowIntro ? (density === "workspace" ? "pt-3" : "pt-5") : undefined,
+                density === "canvas" && "flex min-h-0 flex-1 flex-col",
               )}
             >
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60">
-                  {snapshot.workspace.name} / {selectedProject.identifier}
-                </p>
-                <h1
-                  className={cn(
-                    "font-semibold tracking-[-0.02em] text-foreground",
-                    density === "workspace" ? "mt-1 text-base" : "mt-1.5 text-xl",
-                  )}
-                >
-                  {title}
-                </h1>
-                <p
-                  className={cn(
-                    "mt-1 max-w-3xl text-muted-foreground",
-                    density === "workspace" ? "text-xs leading-4" : "text-sm leading-5",
-                  )}
-                >
-                  {description}
-                </p>
-              </div>
-              {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+              {children}
             </div>
-            <div className={density === "workspace" ? "pt-3" : "pt-5"}>{children}</div>
           </div>
         </main>
       </div>
