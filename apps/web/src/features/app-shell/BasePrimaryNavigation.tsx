@@ -48,7 +48,7 @@ export function BasePrimaryNavigation() {
       <BaseProjectSwitcher />
       <button
         type="button"
-        className="mt-2 flex h-8 w-full items-center gap-2 rounded-md border border-border/60 bg-background/25 px-2 text-left text-xs text-muted-foreground outline-hidden transition-colors hover:border-border hover:bg-accent/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="mt-1 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground outline-hidden transition-colors hover:bg-accent/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         onClick={openCommandPalette}
       >
         <SearchIcon className="size-3.5" />
