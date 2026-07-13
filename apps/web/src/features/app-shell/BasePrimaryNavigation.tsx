@@ -139,6 +139,7 @@ export function BasePrimaryNavigation() {
                 onClick={() => setMoreOpen((open) => !open)}
                 size="sm"
                 title={moreOpen ? "Hide more workspace links" : "Show more workspace links"}
+                type="button"
               >
                 <EllipsisIcon className="size-3.5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">More</span>
