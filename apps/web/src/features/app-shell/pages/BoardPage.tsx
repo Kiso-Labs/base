@@ -30,7 +30,7 @@ import { BasePageShell } from "../BasePageShell";
 import { useBaseWorkspace } from "../BaseWorkspaceContext";
 import { IssueCreateDialog } from "../IssueCreateDialog";
 import { IssueInspector } from "../IssueInspector";
-import { DEFAULT_ISSUE_FILTERS, filterIssues } from "../issueRepository";
+import { DEFAULT_ISSUE_FILTERS, filterIssues, hasActiveIssueFilters } from "../issueRepository";
 import { useIssueWorkspaceStore } from "../issueWorkspaceStore";
 import { ProjectIssueViewBar } from "../ProjectIssueViewBar";
 import { QueueIssuesDialog } from "../QueueIssuesDialog";
@@ -252,6 +252,7 @@ export function BoardPage() {
   const dequeueIssue = useIssueWorkspaceStore((state) => state.dequeueIssue);
   const uiIntent = useIssueWorkspaceStore((state) => state.uiIntent);
   const consumeUiIntent = useIssueWorkspaceStore((state) => state.consumeUiIntent);
+  const resetFilters = useIssueWorkspaceStore((state) => state.resetFilters);
   const [createOpen, setCreateOpen] = useState(false);
   const [createStatus, setCreateStatus] = useState<"Backlog" | "Planned" | "Ready">("Backlog");
   const [announcement, setAnnouncement] = useState("");
@@ -345,6 +346,36 @@ export function BoardPage() {
           <p aria-live="polite" className="sr-only">
             {announcement}
           </p>
+          {visibleIssues.length === 0 ? (
+            <div className="flex items-center justify-between gap-4 border-b border-border/60 bg-muted/10 px-3.5 py-3">
+              <div>
+                <p className="text-xs font-medium text-foreground/80">
+                  {projectIssues.length === 0
+                    ? `No issues in ${selectedProject.name} yet`
+                    : "No issues match this board view"}
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {projectIssues.length === 0
+                    ? "Create project work before moving it through the workflow."
+                    : "Clear the current filters to restore the project board."}
+                </p>
+              </div>
+              {projectIssues.length > 0 && hasActiveIssueFilters(filters) ? (
+                <Button
+                  onClick={() => resetFilters(selectedProject.id)}
+                  size="xs"
+                  variant="outline"
+                >
+                  Clear filters
+                </Button>
+              ) : (
+                <Button onClick={() => openCreate()} size="xs" variant="outline">
+                  <PlusIcon />
+                  New issue
+                </Button>
+              )}
+            </div>
+          ) : null}
           <DndContext collisionDetection={closestCenter} onDragEnd={moveIssue} sensors={sensors}>
             <div className="overflow-x-auto overscroll-x-contain">
               <div className="grid min-w-[1760px] grid-cols-8 divide-x divide-border/60">

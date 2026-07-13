@@ -137,6 +137,7 @@ import { ComposerHandleContext, useComposerHandleContext } from "../composerHand
 import type { ChatComposerHandle } from "./chat/ChatComposer";
 import { BASE_NAVIGATION_ITEMS } from "../features/app-shell/navigation";
 import { useBaseWorkspace } from "../features/app-shell/BaseWorkspaceContext";
+import { executeIssueCommand } from "../features/app-shell/issueCommands";
 import { DEFAULT_ISSUE_FILTERS, filterIssues } from "../features/app-shell/issueRepository";
 import { useIssueWorkspaceStore } from "../features/app-shell/issueWorkspaceStore";
 
@@ -412,44 +413,17 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   const issueGoChordRef = useRef<{ readonly startedAt: number } | null>(null);
 
   const runIssueCommand = useCallback(
-    (command: string) => {
-      const issueSurface = pathname === "/issues" || pathname === "/board";
-      if (command === "issue.goList") {
-        void navigate({ to: "/issues" });
-        return;
-      }
-      if (command === "issue.goBoard") {
-        void navigate({ to: "/board" });
-        return;
-      }
-      if (command === "issue.toggleLayout") {
-        void navigate({ to: pathname === "/board" ? "/issues" : "/board" });
-        return;
-      }
-      if (command === "issue.create" || command === "issue.search" || command === "issue.filters") {
-        requestIssueUiIntent({
-          type:
-            command === "issue.create"
-              ? "create"
-              : command === "issue.search"
-                ? "search"
-                : "filters",
-          projectId: baseProject.id,
-        });
-        if (!issueSurface) void navigate({ to: "/issues" });
-        return;
-      }
-      if (command === "issue.queueView") {
-        requestIssueUiIntent({
-          type: "queue-view",
-          projectId: baseProject.id,
-          issueIds: filterIssues(baseSnapshot.issues, baseProject.id, baseFilters).map(
-            ({ id }) => id,
-          ),
-        });
-        if (!issueSurface) void navigate({ to: "/issues" });
-      }
-    },
+    (command: string) =>
+      executeIssueCommand(command, {
+        source: "shortcut",
+        pathname,
+        projectId: baseProject.id,
+        visibleIssueIds: filterIssues(baseSnapshot.issues, baseProject.id, baseFilters).map(
+          ({ id }) => id,
+        ),
+        requestUiIntent: requestIssueUiIntent,
+        navigate: (to) => void navigate({ to }),
+      }),
     [baseFilters, baseProject.id, baseSnapshot.issues, navigate, pathname, requestIssueUiIntent],
   );
 
@@ -488,9 +462,9 @@ export function CommandPalette({ children }: { children: ReactNode }) {
       });
       if (command?.startsWith("issue.")) {
         if (state.open || editableTarget) return;
+        if (!runIssueCommand(command)) return;
         event.preventDefault();
         event.stopPropagation();
-        runIssueCommand(command);
         return;
       }
       if (command !== "commandPalette.toggle") {
@@ -548,6 +522,7 @@ function OpenCommandPaletteDialog(props: {
   readonly clearOpenIntent: () => void;
 }) {
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
   const {
     selectedProject: selectedBaseProject,
     selectProject: selectBaseProject,
@@ -1158,6 +1133,15 @@ function OpenCommandPaletteDialog(props: {
     selectedBaseProject.id,
     baseFilters,
   ).map(({ id }) => id);
+  const runPaletteIssueCommand = (command: string) =>
+    executeIssueCommand(command, {
+      source: "palette",
+      pathname,
+      projectId: selectedBaseProject.id,
+      visibleIssueIds: visibleBaseIssueIds,
+      requestUiIntent: requestIssueUiIntent,
+      navigate: (to) => void navigate({ to }),
+    });
 
   actionItems.push(
     {
@@ -1169,8 +1153,7 @@ function OpenCommandPaletteDialog(props: {
       icon: <PlusCircleIcon className={ITEM_ICON_CLASS} />,
       shortcutCommand: "issue.create",
       run: async () => {
-        requestIssueUiIntent({ type: "create", projectId: selectedBaseProject.id });
-        await navigate({ to: "/issues" });
+        runPaletteIssueCommand("issue.create");
       },
     },
     {
@@ -1182,8 +1165,7 @@ function OpenCommandPaletteDialog(props: {
       icon: <SearchIcon className={ITEM_ICON_CLASS} />,
       shortcutCommand: "issue.search",
       run: async () => {
-        requestIssueUiIntent({ type: "search", projectId: selectedBaseProject.id });
-        await navigate({ to: "/issues" });
+        runPaletteIssueCommand("issue.search");
       },
     },
     {
@@ -1195,8 +1177,7 @@ function OpenCommandPaletteDialog(props: {
       icon: <ListFilterIcon className={ITEM_ICON_CLASS} />,
       shortcutCommand: "issue.filters",
       run: async () => {
-        requestIssueUiIntent({ type: "filters", projectId: selectedBaseProject.id });
-        await navigate({ to: "/issues" });
+        runPaletteIssueCommand("issue.filters");
       },
     },
     {
@@ -1212,12 +1193,7 @@ function OpenCommandPaletteDialog(props: {
       icon: <PlayIcon className={ITEM_ICON_CLASS} />,
       shortcutCommand: "issue.queueView",
       run: async () => {
-        requestIssueUiIntent({
-          type: "queue-view",
-          projectId: selectedBaseProject.id,
-          issueIds: visibleBaseIssueIds,
-        });
-        await navigate({ to: "/issues" });
+        runPaletteIssueCommand("issue.queueView");
       },
     },
   );

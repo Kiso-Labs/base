@@ -105,8 +105,8 @@ export function ProjectIssueViewBar({
 
   return (
     <>
-      <div className="border-b border-border/60 bg-background/70 backdrop-blur">
-        <div className="flex flex-wrap items-center gap-2 px-3.5 py-2">
+      <div className="divide-y divide-border/50 border-b border-border/60 bg-background">
+        <div className="flex min-h-10 flex-wrap items-center gap-2 px-3.5 py-1.5">
           <div className="flex min-w-0 items-center gap-2">
             <LibraryBigIcon className="size-3.5 text-muted-foreground" />
             <Select
@@ -144,7 +144,7 @@ export function ProjectIssueViewBar({
             </span>
           </div>
 
-          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <div className="ml-auto flex flex-wrap items-center gap-1">
             <IssueViewToggle />
             {layout === "list" ? (
               <Select
@@ -152,7 +152,7 @@ export function ProjectIssueViewBar({
                 onValueChange={(value) => value && setGroupBy(selectedProject.id, value)}
                 value={groupBy}
               >
-                <SelectTrigger aria-label="Group issues" size="sm">
+                <SelectTrigger aria-label="Group issues" className="w-36" size="sm" variant="ghost">
                   <Layers3Icon className="size-3" />
                   <SelectValue>
                     {GROUP_OPTIONS.find(({ value }) => value === groupBy)?.label ?? "Group"}
@@ -167,14 +167,14 @@ export function ProjectIssueViewBar({
                 </SelectPopup>
               </Select>
             ) : null}
-            <Button onClick={() => setSaveOpen(true)} size="sm" variant="ghost">
+            <Button onClick={() => setSaveOpen(true)} size="xs" variant="ghost">
               <BookmarkPlusIcon />
               Save view
             </Button>
             <Button
               disabled={visibleIssueIds.length === 0}
               onClick={() => onRunView(visibleIssueIds)}
-              size="sm"
+              size="xs"
               variant="outline"
             >
               <PlayIcon />
@@ -183,7 +183,7 @@ export function ProjectIssueViewBar({
             </Button>
           </div>
         </div>
-        <div className="flex items-center px-3.5 py-2">
+        <div className="flex min-h-10 items-center px-3.5 py-1.5">
           <IssueFilterBar />
         </div>
       </div>

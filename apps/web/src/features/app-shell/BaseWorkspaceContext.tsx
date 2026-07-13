@@ -1,4 +1,4 @@
-import { createContext, use, useMemo, useState, type ReactNode } from "react";
+import { createContext, use, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   baseWorkspaceRepository,
@@ -8,6 +8,7 @@ import {
   type BaseWorkspaceSnapshot,
 } from "./workspaceRepository";
 import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
+import { deriveWorkflowSummaries, useWorkflowWorkspaceStore } from "./workflowWorkspaceStore";
 
 const SELECTED_PROJECT_STORAGE_KEY = "base:selected-project";
 
@@ -61,12 +62,24 @@ export function BaseWorkspaceProvider({
   const repositorySnapshot = repository.read();
   const issues = useIssueWorkspaceStore((state) => state.issues);
   const runs = useIssueWorkspaceStore((state) => state.runs);
+  const syncWorkflowCatalog = useIssueWorkspaceStore((state) => state.syncWorkflowCatalog);
+  const workflowTemplates = useWorkflowWorkspaceStore((state) => state.templates);
+  const workflows = useMemo(() => deriveWorkflowSummaries(workflowTemplates), [workflowTemplates]);
   const clearIssueSelection = useIssueWorkspaceStore((state) => state.clearIssueSelection);
   const selectIssue = useIssueWorkspaceStore((state) => state.selectIssue);
   const snapshot = useMemo(
-    () => ({ ...repositorySnapshot, issues, runs }),
-    [issues, repositorySnapshot, runs],
+    () => ({ ...repositorySnapshot, issues, runs, workflows }),
+    [issues, repositorySnapshot, runs, workflows],
   );
+
+  useEffect(() => {
+    syncWorkflowCatalog(
+      workflowTemplates.map((template) => ({
+        id: template.id,
+        version: template.versions.at(-1)?.version ?? null,
+      })),
+    );
+  }, [syncWorkflowCatalog, workflowTemplates]);
   const [selectedProjectId, setSelectedProjectId] = useState(() =>
     readInitialProjectId(repository),
   );

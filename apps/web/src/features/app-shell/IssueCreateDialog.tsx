@@ -98,7 +98,17 @@ export function IssueCreateDialog({
 
   const chooseTemplate = (templateId: string) => {
     setSelectedTemplateId(templateId);
-    if (templateId === "blank") return;
+    if (templateId === "blank") {
+      setDescription("");
+      setStatus(initialStatus);
+      setPriority("None");
+      setLabels("");
+      setModule("");
+      setCycle("");
+      setAssignee("");
+      setWorkflowId("none");
+      return;
+    }
     const template = BASE_ISSUE_TEMPLATES.find(({ id }) => id === templateId);
     if (!template) return;
     const nextDraft = applyIssueTemplate(

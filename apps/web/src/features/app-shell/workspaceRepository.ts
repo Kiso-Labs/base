@@ -93,6 +93,8 @@ export interface BaseRunSummary {
   readonly id: string;
   readonly projectId: string;
   readonly workflowId: string;
+  readonly workflowVersionId: string;
+  readonly workflowVersion: number;
   readonly issueId: string;
   readonly status: "Queued" | "Running" | "Waiting" | "Failed" | "Succeeded";
   readonly currentStep: string;
@@ -406,6 +408,8 @@ const snapshot: BaseWorkspaceSnapshot = {
       id: "RUN-2048",
       projectId: "project-base-desktop",
       workflowId: "workflow-concurrency-safety",
+      workflowVersionId: "workflow-concurrency-safety:v2",
+      workflowVersion: 2,
       issueId: "issue-bas-102",
       status: "Running",
       currentStep: "Implementation agent",
@@ -416,6 +420,8 @@ const snapshot: BaseWorkspaceSnapshot = {
       id: "RUN-2047",
       projectId: "project-base-desktop",
       workflowId: "workflow-pre-push-review",
+      workflowVersionId: "workflow-pre-push-review:v3",
+      workflowVersion: 3,
       issueId: "issue-bas-105",
       status: "Queued",
       currentStep: "Waiting for capacity",
@@ -426,6 +432,8 @@ const snapshot: BaseWorkspaceSnapshot = {
       id: "RUN-2046",
       projectId: "project-base-desktop",
       workflowId: "workflow-bug-fix",
+      workflowVersionId: "workflow-bug-fix:v4",
+      workflowVersion: 4,
       issueId: "issue-bas-104",
       status: "Waiting",
       currentStep: "Human approval",
@@ -436,6 +444,8 @@ const snapshot: BaseWorkspaceSnapshot = {
       id: "RUN-1042",
       projectId: "project-base-relay",
       workflowId: "workflow-bug-fix",
+      workflowVersionId: "workflow-bug-fix:v4",
+      workflowVersion: 4,
       issueId: "issue-rly-2",
       status: "Queued",
       currentStep: "Waiting for capacity",

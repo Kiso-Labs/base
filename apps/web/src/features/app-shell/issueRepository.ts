@@ -78,6 +78,20 @@ export const DEFAULT_ISSUE_FILTERS: IssueFilters = {
   runState: "all",
 };
 
+export function hasActiveIssueFilters(filters: IssueFilters): boolean {
+  return (
+    filters.search.trim().length > 0 ||
+    filters.status !== "all" ||
+    filters.priority !== "all" ||
+    filters.label !== "all" ||
+    filters.module !== "all" ||
+    filters.cycle !== "all" ||
+    filters.assignee !== "all" ||
+    filters.workflow !== "all" ||
+    filters.runState !== "all"
+  );
+}
+
 export const BASE_ISSUE_TEMPLATES: readonly BaseIssueTemplate[] = [
   {
     id: "issue-template-bug",
@@ -145,6 +159,8 @@ const PRIORITY_GROUP_ORDER: readonly BasePriority[] = ["Urgent", "High", "Medium
 export interface IssueRepositoryState {
   readonly issues: readonly BaseIssueSummary[];
   readonly runs: readonly BaseRunSummary[];
+  readonly workflowIds: readonly string[];
+  readonly workflowVersionById: Readonly<Record<string, number | null>>;
   readonly nextIssueNumberByProject: Readonly<Record<string, number>>;
   readonly nextRunNumber: number;
 }
@@ -253,6 +269,10 @@ export function createIssueRepositoryState(snapshot: BaseWorkspaceSnapshot): Iss
   return {
     issues: snapshot.issues,
     runs: snapshot.runs,
+    workflowIds: snapshot.workflows.map(({ id }) => id),
+    workflowVersionById: Object.fromEntries(
+      snapshot.workflows.map(({ id, version }) => [id, version > 0 ? version : null]),
+    ),
     nextIssueNumberByProject: nextIssueNumbersByProject(snapshot.issues),
     nextRunNumber: nextRunNumber(snapshot.runs),
   };
@@ -496,6 +516,13 @@ export function assignIssueWorkflow(
   if (!issue) {
     return { ok: false, state, reason: "The issue no longer exists." };
   }
+  if (workflowId && !state.workflowIds.includes(workflowId)) {
+    return {
+      ok: false,
+      state,
+      reason: "The selected workflow template no longer exists.",
+    };
+  }
   if (issue.status === "Queued" || issue.status === "Running" || issue.runState === "queued") {
     return {
       ok: false,
@@ -532,6 +559,16 @@ export function queueIssues(
   issueIds: readonly string[],
   workflowIdOverride?: string,
 ): QueueIssuesResult {
+  if (workflowIdOverride && !state.workflowIds.includes(workflowIdOverride)) {
+    return {
+      state,
+      queuedIds: [],
+      rejected: issueIds.map((issueId) => ({
+        issueId,
+        reason: "The selected workflow template no longer exists.",
+      })),
+    };
+  }
   const issues = [...state.issues];
   const runs = [...state.runs];
   const issueIndexById = new Map(issues.map((issue, index) => [issue.id, index]));
@@ -569,6 +606,21 @@ export function queueIssues(
       });
       continue;
     }
+    if (!state.workflowIds.includes(runWorkflowId)) {
+      rejected.push({
+        issueId,
+        reason: "The selected workflow template no longer exists.",
+      });
+      continue;
+    }
+    const workflowVersion = state.workflowVersionById[runWorkflowId];
+    if (workflowVersion === null || workflowVersion === undefined) {
+      rejected.push({
+        issueId,
+        reason: `Publish the workflow assigned to ${issue.identifier} before queueing it.`,
+      });
+      continue;
+    }
     if (issue.status !== "Ready") {
       rejected.push({
         issueId,
@@ -601,6 +653,8 @@ export function queueIssues(
       id: runId,
       projectId: issue.projectId,
       workflowId: runWorkflowId,
+      workflowVersionId: `${runWorkflowId}:v${workflowVersion}`,
+      workflowVersion,
       issueId: issue.id,
       status: "Queued",
       currentStep: "Waiting for capacity",
@@ -719,6 +773,14 @@ export function createIssue(
   state: IssueRepositoryState,
   input: CreateIssueInput,
 ): CreateIssueResult {
+  const title = input.title.trim();
+  if (!title) throw new Error("Issue title is required.");
+  if (input.project.repositoryId !== input.repository.id) {
+    throw new Error("The selected repository does not belong to this project.");
+  }
+  if (input.workflowId && !state.workflowIds.includes(input.workflowId)) {
+    throw new Error("The selected workflow template no longer exists.");
+  }
   const issueNumber = state.nextIssueNumberByProject[input.project.id] ?? 1;
   const identifier = `${input.project.identifier}-${issueNumber}`;
   const issue: BaseIssueSummary = {
@@ -726,7 +788,7 @@ export function createIssue(
     projectId: input.project.id,
     repositoryId: input.repository.id,
     identifier,
-    title: input.title.trim(),
+    title,
     description: input.description?.trim() ?? "",
     status: input.status ?? "Backlog",
     priority: input.priority ?? "None",

@@ -13,6 +13,7 @@ import {
   dequeueIssue,
   filterIssues,
   groupIssues,
+  hasActiveIssueFilters,
   queueIssues,
   queueIssueView,
   resolveIssueView,
@@ -21,6 +22,11 @@ import {
 } from "./issueRepository";
 
 describe("issue repository", () => {
+  it("detects whether a project issue query has active filters", () => {
+    expect(hasActiveIssueFilters(DEFAULT_ISSUE_FILTERS)).toBe(false);
+    expect(hasActiveIssueFilters({ ...DEFAULT_ISSUE_FILTERS, search: "retry" })).toBe(true);
+    expect(hasActiveIssueFilters({ ...DEFAULT_ISSUE_FILTERS, workflow: "assigned" })).toBe(true);
+  });
   it("creates a backlog issue with a stable project identifier and safe defaults", () => {
     const snapshot = baseWorkspaceRepository.read();
     const state = createIssueRepositoryState(snapshot);
@@ -68,6 +74,24 @@ describe("issue repository", () => {
     const result = createIssue(state, { project, repository, title: "Project-local sequence" });
 
     expect(result.issue.identifier).toBe("BAS-106");
+  });
+
+  it("rejects invalid issue creation at the repository boundary", () => {
+    const snapshot = baseWorkspaceRepository.read();
+    const state = createIssueRepositoryState(snapshot);
+    const project = snapshot.projects[0]!;
+    const repository = snapshot.repositories[0]!;
+
+    expect(() => createIssue(state, { project, repository, title: "   " })).toThrow(
+      "Issue title is required.",
+    );
+    expect(() =>
+      createIssue(state, {
+        project: { ...project, repositoryId: "repository-other" },
+        repository,
+        title: "Cross-project issue",
+      }),
+    ).toThrow("The selected repository does not belong to this project.");
   });
 
   it("combines search and structured filters over the same issue collection", () => {
@@ -130,6 +154,50 @@ describe("issue repository", () => {
     expect(queued.state).toBe(initial);
   });
 
+  it("rejects workflow assignments and queue overrides that are not workspace templates", () => {
+    const initial = createIssueRepositoryState(baseWorkspaceRepository.read());
+    const assigned = assignIssueWorkflow(initial, "issue-bas-103", "workflow-missing");
+
+    expect(assigned).toMatchObject({
+      ok: false,
+      reason: "The selected workflow template no longer exists.",
+    });
+    expect(assigned.state).toBe(initial);
+
+    const queued = queueIssues(initial, ["issue-bas-101"], "workflow-missing");
+    expect(queued.queuedIds).toEqual([]);
+    expect(queued.rejected).toEqual([
+      {
+        issueId: "issue-bas-101",
+        reason: "The selected workflow template no longer exists.",
+      },
+    ]);
+    expect(queued.state.runs).toBe(initial.runs);
+  });
+
+  it("allows draft assignment but requires a published version before queueing", () => {
+    const initial = createIssueRepositoryState(baseWorkspaceRepository.read());
+    const draftState = {
+      ...initial,
+      workflowIds: [...initial.workflowIds, "workflow-new-draft"],
+      workflowVersionById: {
+        ...initial.workflowVersionById,
+        "workflow-new-draft": null,
+      },
+    };
+    const assigned = assignIssueWorkflow(draftState, "issue-bas-101", "workflow-new-draft");
+    expect(assigned).toMatchObject({ ok: true, issue: { workflowId: "workflow-new-draft" } });
+
+    const queued = queueIssues(assigned.state, ["issue-bas-101"]);
+    expect(queued.queuedIds).toEqual([]);
+    expect(queued.rejected).toEqual([
+      {
+        issueId: "issue-bas-101",
+        reason: "Publish the workflow assigned to BAS-101 before queueing it.",
+      },
+    ]);
+  });
+
   it("queues only ready issues with workflows and creates deterministic run context", () => {
     const initial = createIssueRepositoryState(baseWorkspaceRepository.read());
     const result = queueIssues(initial, ["issue-bas-101", "issue-bas-103", "issue-bas-105"]);
@@ -156,6 +224,8 @@ describe("issue repository", () => {
       projectId: "project-base-desktop",
       issueId: "issue-bas-101",
       workflowId: "workflow-reliable-feature-delivery",
+      workflowVersionId: "workflow-reliable-feature-delivery:v7",
+      workflowVersion: 7,
       status: "Queued",
     });
     expect(result.state.nextRunNumber).toBe(2050);
