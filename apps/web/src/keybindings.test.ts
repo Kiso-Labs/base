@@ -58,6 +58,21 @@ function modShortcut(
   };
 }
 
+function plainShortcut(
+  key: string,
+  overrides: Partial<Omit<KeybindingShortcut, "key">> = {},
+): KeybindingShortcut {
+  return {
+    key,
+    metaKey: false,
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    modKey: false,
+    ...overrides,
+  };
+}
+
 function whenIdentifier(name: string): KeybindingWhenNode {
   return { type: "identifier", name };
 }
@@ -85,7 +100,32 @@ function compile(bindings: TestBinding[]): ResolvedKeybindingsConfig {
 }
 
 const DEFAULT_BINDINGS = compile([
-  { shortcut: modShortcut("b"), command: "sidebar.toggle" },
+  { shortcut: modShortcut("\\"), command: "sidebar.toggle" },
+  {
+    shortcut: plainShortcut("c"),
+    command: "issue.create",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: plainShortcut("/"),
+    command: "issue.search",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: plainShortcut("f"),
+    command: "issue.filters",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("b"),
+    command: "issue.toggleLayout",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: plainShortcut("q", { shiftKey: true }),
+    command: "issue.queueView",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
   { shortcut: modShortcut("j"), command: "terminal.toggle" },
   { shortcut: modShortcut("b", { altKey: true }), command: "rightPanel.toggle" },
   {
@@ -315,6 +355,11 @@ describe("shortcutLabelForCommand", () => {
   it("returns effective labels for non-terminal commands", () => {
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "sidebar.toggle", "MacIntel"),
+      "⌘\\",
+    );
+    assert.strictEqual(shortcutLabelForCommand(DEFAULT_BINDINGS, "issue.create", "MacIntel"), "C");
+    assert.strictEqual(
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "issue.toggleLayout", "MacIntel"),
       "⌘B",
     );
     assert.strictEqual(shortcutLabelForCommand(DEFAULT_BINDINGS, "chat.new", "MacIntel"), "⇧⌘O");

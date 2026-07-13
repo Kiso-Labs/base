@@ -2,6 +2,7 @@ import { CheckIcon, ChevronDownIcon, GitBranchIcon } from "lucide-react";
 
 import {
   Menu,
+  MenuGroup,
   MenuGroupLabel,
   MenuPopup,
   MenuRadioGroup,
@@ -30,7 +31,7 @@ export function BaseProjectSwitcher({ className }: { readonly className?: string
         }
       >
         <span className="flex size-7 shrink-0 items-center justify-center rounded-[5px] border border-border bg-card text-[11px] font-semibold text-foreground shadow-sm/5">
-          B
+          {selectedProject.identifier.slice(0, 1)}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-medium text-foreground">
@@ -44,28 +45,32 @@ export function BaseProjectSwitcher({ className }: { readonly className?: string
         <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-popup-open:rotate-180" />
       </MenuTrigger>
       <MenuPopup align="start" className="w-64" sideOffset={5}>
-        <MenuGroupLabel>Kiso Labs projects</MenuGroupLabel>
-        <MenuRadioGroup value={selectedProject.id} onValueChange={selectProject}>
-          {snapshot.projects.map((project) => {
-            const repository = snapshot.repositories.find(({ id }) => id === project.repositoryId);
-            return (
-              <MenuRadioItem key={project.id} value={project.id} className="gap-2.5">
-                <span className="flex size-6 items-center justify-center rounded-[5px] border border-border bg-card text-[10px] font-semibold">
-                  {project.identifier.slice(0, 1)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-medium">{project.name}</span>
-                  <span className="block truncate font-mono text-[10px] text-muted-foreground">
-                    {repository?.fullName ?? "Repository unavailable"}
+        <MenuGroup>
+          <MenuGroupLabel>Kiso Labs projects</MenuGroupLabel>
+          <MenuRadioGroup value={selectedProject.id} onValueChange={selectProject}>
+            {snapshot.projects.map((project) => {
+              const repository = snapshot.repositories.find(
+                ({ id }) => id === project.repositoryId,
+              );
+              return (
+                <MenuRadioItem className="gap-2.5" key={project.id} value={project.id}>
+                  <span className="flex size-6 items-center justify-center rounded-[5px] border border-border bg-card text-[10px] font-semibold">
+                    {project.identifier.slice(0, 1)}
                   </span>
-                </span>
-                {project.id === selectedProject.id ? (
-                  <CheckIcon className="size-3.5 text-primary" />
-                ) : null}
-              </MenuRadioItem>
-            );
-          })}
-        </MenuRadioGroup>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium">{project.name}</span>
+                    <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                      {repository?.fullName ?? "Repository unavailable"}
+                    </span>
+                  </span>
+                  {project.id === selectedProject.id ? (
+                    <CheckIcon className="size-3.5 text-primary" />
+                  ) : null}
+                </MenuRadioItem>
+              );
+            })}
+          </MenuRadioGroup>
+        </MenuGroup>
       </MenuPopup>
     </Menu>
   );

@@ -54,11 +54,16 @@ function urgencyVariant(urgency: BaseAttentionItem["urgency"]) {
 export function InboxPage() {
   const { selectedProject, snapshot } = useBaseWorkspace();
   const projectIssues = snapshot.issues.filter(({ projectId }) => projectId === selectedProject.id);
-  const urgentCount = snapshot.attentionItems.filter(({ urgency }) => urgency === "Urgent").length;
-  const waitingCount = snapshot.attentionItems.filter(({ waitingFor }) =>
+  const projectIssueIds = new Set(projectIssues.map(({ id }) => id));
+  const projectAttentionItems = snapshot.attentionItems.filter(({ issueId }) =>
+    projectIssueIds.has(issueId),
+  );
+  const projectRuns = snapshot.runs.filter(({ projectId }) => projectId === selectedProject.id);
+  const urgentCount = projectAttentionItems.filter(({ urgency }) => urgency === "Urgent").length;
+  const waitingCount = projectAttentionItems.filter(({ waitingFor }) =>
     waitingFor.includes("hr"),
   ).length;
-  const reviewCount = snapshot.attentionItems.filter(({ kind }) => kind === "review").length;
+  const reviewCount = projectAttentionItems.filter(({ kind }) => kind === "review").length;
 
   return (
     <BasePageShell
@@ -78,7 +83,7 @@ export function InboxPage() {
           detail="Across active workflows"
           label="Needs attention"
           tone="warning"
-          value={String(snapshot.attentionItems.length)}
+          value={String(projectAttentionItems.length)}
         />
         <BaseMetricCard
           detail="Policy hook violation"
@@ -102,10 +107,10 @@ export function InboxPage() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <BasePanel description="Ordered by urgency, then time waiting" title="Attention queue">
           <div className="divide-y divide-border/60">
-            {snapshot.attentionItems.map((item) => {
+            {projectAttentionItems.map((item) => {
               const issue = projectIssues.find(({ id }) => id === item.issueId);
               const workflow = snapshot.workflows.find(({ id }) => id === issue?.workflowId);
-              const run = snapshot.runs.find(({ issueId }) => issueId === item.issueId);
+              const run = projectRuns.find(({ issueId }) => issueId === item.issueId);
               const presentation = attentionPresentation[item.kind];
               const Icon = presentation.icon;
 
@@ -173,7 +178,7 @@ export function InboxPage() {
         <div className="grid content-start gap-4">
           <BasePanel description="Execution related to this inbox" title="Active runs">
             <div className="divide-y divide-border/60">
-              {snapshot.runs.map((run) => {
+              {projectRuns.map((run) => {
                 const issue = projectIssues.find(({ id }) => id === run.issueId);
                 const workflow = snapshot.workflows.find(({ id }) => id === run.workflowId);
 

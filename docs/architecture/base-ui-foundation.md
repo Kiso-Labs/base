@@ -27,22 +27,37 @@ Visible branding may change to Base, but Phase 1 must preserve persisted and ins
 
 The existing agent routes remain stable while the Base product surfaces gain URL-addressable routes.
 
-| Route                       | Surface             | Phase 1 behavior                                                         |
+| Route                       | Surface             | Current behavior                                                         |
 | --------------------------- | ------------------- | ------------------------------------------------------------------------ |
 | `/`                         | Agent workspace     | Existing T3 Code no-active-thread state remains intact.                  |
 | `/:environmentId/:threadId` | Agent session       | Existing persistent thread, terminal, diff, and preview workspace.       |
 | `/draft/:draftId`           | Draft agent session | Existing local draft workspace.                                          |
 | `/inbox`                    | Inbox               | Base attention-queue preview.                                            |
-| `/issues`                   | Issues              | Seeded dense issue-list preview.                                         |
-| `/board`                    | Board               | Seeded shared-work Kanban preview.                                       |
-| `/workflows`                | Workflows           | Reusable workflow catalog preview.                                       |
-| `/runs`                     | Runs                | Simulated run-history preview.                                           |
+| `/issues`                   | Issues              | Project-scoped issue list over the shared issue repository.              |
+| `/board`                    | Board               | Status-grouped projection of the same project-scoped issue repository.   |
+| `/workflows`                | Workflows           | Reusable workflow-template catalog shared across projects.               |
+| `/runs`                     | Runs                | Run history scoped to the selected project.                              |
 | `/agents`                   | Agents              | Session overview and bridge into the existing agent workspace.           |
 | `/repository`               | Repository          | Repository, branch, worktree, and health preview.                        |
 | `/settings/*`               | Settings            | Existing settings routes under Base primary navigation.                  |
 | `/pair`                     | Pairing             | Existing authentication/pairing surface outside the authenticated shell. |
 
 New product routes sit under one pathless authenticated layout, so the auth guard is not duplicated across route files.
+
+## Phase 2 ownership model
+
+Projects are the unit of execution history and issue planning. Every issue belongs to exactly one project, and every workflow run records both its project and source issue. Workflow templates live at the workspace level so any project can assign the same template without sharing that project's run history.
+
+```text
+Workspace
+├── workflow templates
+└── projects
+    └── project
+        ├── issues ── assign ──> workflow template
+        └── runs   ── execute ─> issue + workflow template
+```
+
+The Issues list and Board are projections over one persisted client-side repository. Creation, live filters, inspector edits, workflow assignment, status transitions, and queue actions therefore update both views immediately. Status changes follow an explicit lifecycle; queueing is a dedicated action that requires a Ready issue and an assigned workflow template, then creates a run inside the issue's project.
 
 ## Component map
 
@@ -60,7 +75,7 @@ New product routes sit under one pathless authenticated layout, so the auth guar
 ## Delivery map
 
 1. **Phase 1 — shell.** Add visible Base/Kiso branding, unified navigation, project context, authenticated product routes, command actions, theme tokens, responsive/resizable page chrome, and representative placeholders while preserving the existing agent workspace.
-2. **Phase 2 — issues and board.** Put shared typed issues behind a mock repository, then add list/board projections, detail inspector, filters, creation, guarded drag transitions, workflow attachment, and queue actions.
+2. **Phase 2 — issues and board.** Completed as a shared persisted issue repository with project ownership, list/board projections, detail inspector, live filters, creation, guarded drag transitions, reusable workflow-template assignment, and project-scoped queue/run actions.
 3. **Phase 3 — workflows.** Add `@xyflow/react`, an isolated canvas store, node library, typed custom nodes/edges, validation, persistence, undo/redo, and inspectors.
 4. **Phase 4 — runs.** Add a typed simulated runtime that advances queue items, pauses for approval, follows failure/retry paths, and keeps issue, graph, timeline, console, and agent IDs synchronized.
 5. **Phase 5 — polish.** Complete loading/error/empty states, shortcuts, focus restoration, reduced motion, window-size QA, and screenshot coverage.

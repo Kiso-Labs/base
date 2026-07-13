@@ -1,5 +1,5 @@
-import { Link, useLocation } from "@tanstack/react-router";
-import { SearchIcon } from "lucide-react";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { LibraryBigIcon, SearchIcon } from "lucide-react";
 
 import { useOpenCommandPalette } from "~/commandPaletteContext";
 import { Kbd } from "~/components/ui/kbd";
@@ -19,20 +19,28 @@ import {
   type BaseNavigationItem,
 } from "./navigation";
 import { useCommandPaletteShortcutLabel } from "./useCommandPaletteShortcutLabel";
+import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
 import { selectActiveRunCount, selectAttentionCount } from "./workspaceRepository";
 
 const WORK_NAVIGATION_IDS = new Set(["inbox", "issues", "board", "workflows", "runs"]);
 
 export function BasePrimaryNavigation() {
   const pathname = useLocation({ select: (location) => location.pathname });
+  const navigate = useNavigate();
   const activeItem = resolveBaseNavigationItem(pathname);
   const openCommandPalette = useOpenCommandPalette();
   const commandPaletteShortcutLabel = useCommandPaletteShortcutLabel();
-  const { snapshot } = useBaseWorkspace();
+  const { selectedProject, snapshot } = useBaseWorkspace();
   const { isMobile, setOpenMobile } = useSidebar();
+  const views = useIssueWorkspaceStore((state) => state.views);
+  const activeViewId = useIssueWorkspaceStore(
+    (state) => state.activeViewIdByProject[selectedProject.id] ?? null,
+  );
+  const activateView = useIssueWorkspaceStore((state) => state.activateView);
+  const projectViews = views.filter(({ projectId }) => projectId === selectedProject.id);
   const badgeById: Partial<Record<BaseNavigationId, string>> = {
-    inbox: String(selectAttentionCount(snapshot)),
-    runs: String(selectActiveRunCount(snapshot)),
+    inbox: String(selectAttentionCount(snapshot, selectedProject.id)),
+    runs: String(selectActiveRunCount(snapshot, selectedProject.id)),
   };
 
   return (
@@ -60,6 +68,36 @@ export function BasePrimaryNavigation() {
             if (isMobile) setOpenMobile(false);
           }}
         />
+        <div className="mt-3">
+          <p className="mb-1 px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
+            Project views
+          </p>
+          <SidebarMenu>
+            {projectViews.map((view) => (
+              <SidebarMenuItem key={view.id}>
+                <SidebarMenuButton
+                  className="h-7 gap-2 px-2 text-[12px]"
+                  isActive={
+                    view.id === activeViewId && (pathname === "/issues" || pathname === "/board")
+                  }
+                  onClick={() => {
+                    activateView(selectedProject.id, view.id);
+                    void navigate({ to: view.layout === "board" ? "/board" : "/issues" });
+                    if (isMobile) setOpenMobile(false);
+                  }}
+                  size="sm"
+                  title={`${view.name} · ${view.layout}`}
+                >
+                  <LibraryBigIcon className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{view.name}</span>
+                  <span className="font-mono text-[8px] uppercase text-muted-foreground/60">
+                    {view.layout.slice(0, 1)}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </div>
         <NavigationGroup
           label="Build"
           className="mt-3"

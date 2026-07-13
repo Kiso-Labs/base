@@ -18,7 +18,7 @@ import {
   type SourceControlRepositoryInfo,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
 } from "@t3tools/contracts";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
   ArrowDownIcon,
@@ -27,8 +27,14 @@ import {
   CornerLeftUpIcon,
   FolderIcon,
   FolderPlusIcon,
+  LibraryBigIcon,
   LinkIcon,
+  ListFilterIcon,
+  ListTodoIcon,
   MessageSquareIcon,
+  PlayIcon,
+  PlusCircleIcon,
+  SearchIcon,
   SquarePenIcon,
 } from "lucide-react";
 import {
@@ -130,6 +136,9 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
 import { BASE_NAVIGATION_ITEMS } from "../features/app-shell/navigation";
+import { useBaseWorkspace } from "../features/app-shell/BaseWorkspaceContext";
+import { DEFAULT_ISSUE_FILTERS, filterIssues } from "../features/app-shell/issueRepository";
+import { useIssueWorkspaceStore } from "../features/app-shell/issueWorkspaceStore";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 
@@ -381,6 +390,13 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   const toggleOpen = useCallback(() => dispatch({ _tag: "Toggle" }), []);
   const openAddProject = useCallback(() => dispatch({ _tag: "OpenAddProject" }), []);
   const clearOpenIntent = useCallback(() => dispatch({ _tag: "ClearOpenIntent" }), []);
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const { selectedProject: baseProject, snapshot: baseSnapshot } = useBaseWorkspace();
+  const requestIssueUiIntent = useIssueWorkspaceStore((issueState) => issueState.requestUiIntent);
+  const baseFilters = useIssueWorkspaceStore(
+    (issueState) => issueState.filtersByProject[baseProject.id] ?? DEFAULT_ISSUE_FILTERS,
+  );
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const composerHandleRef = useRef<ChatComposerHandle | null>(null);
   const routeTarget = useParams({
@@ -393,16 +409,90 @@ export function CommandPalette({ children }: { children: ReactNode }) {
       ? selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef).terminalOpen
       : false,
   );
+  const issueGoChordRef = useRef<{ readonly startedAt: number } | null>(null);
+
+  const runIssueCommand = useCallback(
+    (command: string) => {
+      const issueSurface = pathname === "/issues" || pathname === "/board";
+      if (command === "issue.goList") {
+        void navigate({ to: "/issues" });
+        return;
+      }
+      if (command === "issue.goBoard") {
+        void navigate({ to: "/board" });
+        return;
+      }
+      if (command === "issue.toggleLayout") {
+        void navigate({ to: pathname === "/board" ? "/issues" : "/board" });
+        return;
+      }
+      if (command === "issue.create" || command === "issue.search" || command === "issue.filters") {
+        requestIssueUiIntent({
+          type:
+            command === "issue.create"
+              ? "create"
+              : command === "issue.search"
+                ? "search"
+                : "filters",
+          projectId: baseProject.id,
+        });
+        if (!issueSurface) void navigate({ to: "/issues" });
+        return;
+      }
+      if (command === "issue.queueView") {
+        requestIssueUiIntent({
+          type: "queue-view",
+          projectId: baseProject.id,
+          issueIds: filterIssues(baseSnapshot.issues, baseProject.id, baseFilters).map(
+            ({ id }) => id,
+          ),
+        });
+        if (!issueSurface) void navigate({ to: "/issues" });
+      }
+    },
+    [baseFilters, baseProject.id, baseSnapshot.issues, navigate, pathname, requestIssueUiIntent],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      const target = event.target;
+      const editableTarget =
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.matches("input, textarea, select"));
+
+      if (!state.open && !editableTarget && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const key = event.key.toLocaleLowerCase();
+        const pendingChord = issueGoChordRef.current;
+        if (pendingChord && performance.now() - pendingChord.startedAt < 900) {
+          issueGoChordRef.current = null;
+          if (key === "i" || key === "b") {
+            event.preventDefault();
+            event.stopPropagation();
+            runIssueCommand(key === "i" ? "issue.goList" : "issue.goBoard");
+            return;
+          }
+        }
+        if (key === "g") {
+          issueGoChordRef.current = { startedAt: performance.now() };
+          return;
+        }
+        issueGoChordRef.current = null;
+      }
+
       const command = resolveShortcutCommand(event, keybindings, {
         context: {
           terminalFocus: isTerminalFocused(),
           terminalOpen,
         },
       });
+      if (command?.startsWith("issue.")) {
+        if (state.open || editableTarget) return;
+        event.preventDefault();
+        event.stopPropagation();
+        runIssueCommand(command);
+        return;
+      }
       if (command !== "commandPalette.toggle") {
         return;
       }
@@ -412,7 +502,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [keybindings, terminalOpen, toggleOpen]);
+  }, [keybindings, runIssueCommand, state.open, terminalOpen, toggleOpen]);
 
   return (
     <OpenCommandPaletteProvider openCommandPalette={openCommandPalette}>
@@ -458,6 +548,18 @@ function OpenCommandPaletteDialog(props: {
   readonly clearOpenIntent: () => void;
 }) {
   const navigate = useNavigate();
+  const {
+    selectedProject: selectedBaseProject,
+    selectProject: selectBaseProject,
+    snapshot: baseSnapshot,
+  } = useBaseWorkspace();
+  const baseViews = useIssueWorkspaceStore((issueState) => issueState.views);
+  const baseFilters = useIssueWorkspaceStore(
+    (issueState) => issueState.filtersByProject[selectedBaseProject.id] ?? DEFAULT_ISSUE_FILTERS,
+  );
+  const requestIssueUiIntent = useIssueWorkspaceStore((issueState) => issueState.requestUiIntent);
+  const activateIssueView = useIssueWorkspaceStore((issueState) => issueState.activateView);
+  const selectBaseIssue = useIssueWorkspaceStore((issueState) => issueState.selectIssue);
   const { clearOpenIntent, openIntent, setOpen } = props;
   const composerHandleRef = useComposerHandleContext();
   const [query, setQuery] = useState("");
@@ -1050,6 +1152,144 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
+
+  const visibleBaseIssueIds = filterIssues(
+    baseSnapshot.issues,
+    selectedBaseProject.id,
+    baseFilters,
+  ).map(({ id }) => id);
+
+  actionItems.push(
+    {
+      kind: "action",
+      value: "action:issue:create",
+      searchTerms: ["issue", "create", "new", selectedBaseProject.name],
+      title: `Create issue in ${selectedBaseProject.name}`,
+      description: "Open the project-aware issue composer and reusable templates.",
+      icon: <PlusCircleIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "issue.create",
+      run: async () => {
+        requestIssueUiIntent({ type: "create", projectId: selectedBaseProject.id });
+        await navigate({ to: "/issues" });
+      },
+    },
+    {
+      kind: "action",
+      value: "action:issue:search",
+      searchTerms: ["issue", "search", "find", selectedBaseProject.name],
+      title: "Search project issues",
+      description: `Focus the live ${selectedBaseProject.name} issue search.`,
+      icon: <SearchIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "issue.search",
+      run: async () => {
+        requestIssueUiIntent({ type: "search", projectId: selectedBaseProject.id });
+        await navigate({ to: "/issues" });
+      },
+    },
+    {
+      kind: "action",
+      value: "action:issue:filters",
+      searchTerms: ["issue", "filter", "query", "view"],
+      title: "Filter project issues",
+      description: "Open the shared list and board filters.",
+      icon: <ListFilterIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "issue.filters",
+      run: async () => {
+        requestIssueUiIntent({ type: "filters", projectId: selectedBaseProject.id });
+        await navigate({ to: "/issues" });
+      },
+    },
+    {
+      kind: "action",
+      value: "action:issue:queue-view",
+      searchTerms: ["issue", "view", "collection", "run", "workflow", "queue"],
+      title: "Run workflow on current view",
+      description:
+        visibleBaseIssueIds.length === 0
+          ? "The current view has no issues to materialize."
+          : `Review ${visibleBaseIssueIds.length} matching issue${visibleBaseIssueIds.length === 1 ? "" : "s"} before queueing.`,
+      disabled: visibleBaseIssueIds.length === 0,
+      icon: <PlayIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "issue.queueView",
+      run: async () => {
+        requestIssueUiIntent({
+          type: "queue-view",
+          projectId: selectedBaseProject.id,
+          issueIds: visibleBaseIssueIds,
+        });
+        await navigate({ to: "/issues" });
+      },
+    },
+  );
+
+  actionItems.push({
+    kind: "submenu",
+    value: "action:issue:open-view",
+    searchTerms: ["issue", "view", "collection", "group", "saved", "project"],
+    title: "Open project issue view…",
+    description: "Switch projects and restore a saved issue query.",
+    icon: <LibraryBigIcon className={ITEM_ICON_CLASS} />,
+    addonIcon: <LibraryBigIcon className={ADDON_ICON_CLASS} />,
+    groups: baseSnapshot.projects.map((project) => ({
+      value: `base-project-views:${project.id}`,
+      label: project.name,
+      items: baseViews
+        .filter((view) => view.projectId === project.id)
+        .map(
+          (view): CommandPaletteActionItem => ({
+            kind: "action",
+            value: `action:issue:view:${view.id}`,
+            searchTerms: [view.name, project.name, project.identifier, view.groupBy, view.layout],
+            title: view.name,
+            description: `${project.identifier} · ${view.layout} · group by ${view.groupBy}`,
+            icon: <LibraryBigIcon className={ITEM_ICON_CLASS} />,
+            run: async () => {
+              selectBaseProject(project.id);
+              activateIssueView(project.id, view.id);
+              await navigate({ to: view.layout === "board" ? "/board" : "/issues" });
+            },
+          }),
+        ),
+    })),
+  });
+
+  actionItems.push({
+    kind: "submenu",
+    value: "action:issue:open",
+    searchTerms: ["issue", "open", "find", "identifier", "project"],
+    title: "Open issue…",
+    description: "Peek at any issue in its owning project.",
+    icon: <ListTodoIcon className={ITEM_ICON_CLASS} />,
+    addonIcon: <ListTodoIcon className={ADDON_ICON_CLASS} />,
+    groups: baseSnapshot.projects.map((project) => ({
+      value: `base-project-issues:${project.id}`,
+      label: project.name,
+      items: baseSnapshot.issues
+        .filter((issue) => issue.projectId === project.id)
+        .map(
+          (issue): CommandPaletteActionItem => ({
+            kind: "action",
+            value: `action:issue:open:${issue.id}`,
+            searchTerms: [issue.identifier, issue.title, issue.status, ...issue.labels],
+            title: (
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {issue.identifier}
+                </span>
+                <span className="truncate">{issue.title}</span>
+              </span>
+            ),
+            description: `${issue.status} · ${project.name}`,
+            icon: <ListTodoIcon className={ITEM_ICON_CLASS} />,
+            run: async () => {
+              selectBaseProject(project.id);
+              selectBaseIssue(issue.id);
+              await navigate({ to: "/issues" });
+            },
+          }),
+        ),
+    })),
+  });
 
   for (const item of BASE_NAVIGATION_ITEMS) {
     const Icon = item.icon;

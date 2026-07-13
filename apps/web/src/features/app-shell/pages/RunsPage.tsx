@@ -119,11 +119,16 @@ function RunRow({
 }
 
 export function RunsPage() {
-  const { snapshot } = useBaseWorkspace();
-  const runningRuns = snapshot.runs.filter(({ status }) => status === "Running").length;
-  const queuedRuns = snapshot.runs.filter(({ status }) => status === "Queued").length;
-  const waitingRuns = snapshot.runs.filter(({ status }) => status === "Waiting").length;
-  const issuesById = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
+  const { selectedProject, snapshot } = useBaseWorkspace();
+  const projectRuns = snapshot.runs.filter(({ projectId }) => projectId === selectedProject.id);
+  const runningRuns = projectRuns.filter(({ status }) => status === "Running").length;
+  const queuedRuns = projectRuns.filter(({ status }) => status === "Queued").length;
+  const waitingRuns = projectRuns.filter(({ status }) => status === "Waiting").length;
+  const issuesById = new Map(
+    snapshot.issues
+      .filter(({ projectId }) => projectId === selectedProject.id)
+      .map((issue) => [issue.id, issue]),
+  );
   const workflowsById = new Map(snapshot.workflows.map((workflow) => [workflow.id, workflow]));
 
   return (
@@ -147,9 +152,9 @@ export function RunsPage() {
         <BasePanel>
           <div className="grid grid-cols-2 gap-y-4 px-4 py-3.5 sm:grid-cols-4">
             <BaseMetricCard
-              detail="Visible in this workspace"
+              detail="Kept inside the current project"
               label="Total runs"
-              value={String(snapshot.runs.length)}
+              value={String(projectRuns.length)}
             />
             <BaseMetricCard
               detail="Agents are executing"
@@ -188,7 +193,7 @@ export function RunsPage() {
               <Button size="xs" variant="secondary">
                 All runs
                 <span className="font-mono text-[9px] text-muted-foreground">
-                  {snapshot.runs.length}
+                  {projectRuns.length}
                 </span>
               </Button>
               <Button size="xs" variant="ghost">
@@ -229,7 +234,7 @@ export function RunsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {snapshot.runs.map((run) => (
+              {projectRuns.map((run) => (
                 <RunRow
                   issue={issuesById.get(run.issueId)}
                   key={run.id}

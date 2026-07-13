@@ -3,16 +3,14 @@ import {
   MoreHorizontalIcon,
   PlayIcon,
   PlusIcon,
-  SearchIcon,
-  SlidersHorizontalIcon,
   WorkflowIcon,
+  XIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
-import { Input } from "~/components/ui/input";
 import {
   Table,
   TableBody,
@@ -23,23 +21,17 @@ import {
 } from "~/components/ui/table";
 
 import { IssueStatusBadge, PriorityLabel } from "../BaseEntityPills";
-import { BaseMetricCard, BasePageShell, BasePanel } from "../BasePageShell";
+import { BasePageShell } from "../BasePageShell";
 import { useBaseWorkspace } from "../BaseWorkspaceContext";
+import { IssueCreateDialog } from "../IssueCreateDialog";
+import { IssueInspector } from "../IssueInspector";
+import { DEFAULT_ISSUE_FILTERS, filterIssues, groupIssues } from "../issueRepository";
+import { useIssueWorkspaceStore } from "../issueWorkspaceStore";
+import { ProjectIssueViewBar } from "../ProjectIssueViewBar";
+import { QueueIssuesDialog } from "../QueueIssuesDialog";
 import type { BaseIssueSummary, BaseWorkflowSummary } from "../workspaceRepository";
 
-interface IssuePreviewMetadata {
-  readonly cycle: string;
-  readonly module: string;
-  readonly queue: string;
-}
-
-const issuePreviewMetadata: Record<string, IssuePreviewMetadata> = {
-  "BAS-101": { cycle: "Cycle 03", module: "Agent runtime", queue: "Ready" },
-  "BAS-102": { cycle: "Cycle 03", module: "Runtime safety", queue: "Executing" },
-  "BAS-103": { cycle: "Icebox", module: "Workflow builder", queue: "—" },
-  "BAS-104": { cycle: "Cycle 02", module: "Run observability", queue: "Review" },
-  "BAS-105": { cycle: "Cycle 03", module: "Repository safety", queue: "#2" },
-};
+const PRIORITY_ORDER = { Urgent: 0, High: 1, Medium: 2, Low: 3, None: 4 } as const;
 
 function RunStateBadge({ state }: { readonly state: BaseIssueSummary["runState"] }) {
   const presentation = {
@@ -59,26 +51,33 @@ function RunStateBadge({ state }: { readonly state: BaseIssueSummary["runState"]
 
 function IssueRow({
   issue,
+  onOpen,
+  onSelectedChange,
+  selected,
   workflow,
 }: {
   readonly issue: BaseIssueSummary;
+  readonly onOpen: () => void;
+  readonly onSelectedChange: (selected: boolean) => void;
+  readonly selected: boolean;
   readonly workflow: BaseWorkflowSummary | undefined;
 }) {
-  const metadata = issuePreviewMetadata[issue.identifier] ?? {
-    cycle: "Unscheduled",
-    module: "Unassigned",
-    queue: "—",
-  };
   const assigneeInitial = issue.assignee === "Unassigned" ? "—" : issue.assignee.slice(0, 1);
 
   return (
-    <TableRow className="group h-[58px]">
+    <TableRow className="group h-11" data-selected={selected || undefined}>
       <TableCell className="w-9 pl-3.5">
-        <Checkbox aria-label={`Select ${issue.identifier}`} />
+        <Checkbox
+          aria-label={`Select ${issue.identifier}`}
+          checked={selected}
+          onCheckedChange={(checked) => onSelectedChange(checked === true)}
+        />
       </TableCell>
-      <TableCell className="min-w-[360px] max-w-[520px] whitespace-normal py-2">
+      <TableCell className="min-w-[340px] max-w-[540px] whitespace-normal py-1.5">
         <button
           className="block min-w-0 max-w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          data-issue-id={issue.id}
+          onClick={onOpen}
           type="button"
         >
           <span className="flex items-center gap-2">
@@ -87,10 +86,10 @@ function IssueRow({
             </span>
             <span className="truncate text-xs font-medium text-foreground/90">{issue.title}</span>
           </span>
-          <span className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground/65">
-            Updated {issue.updatedAt}
+          <span className="mt-0.5 flex items-center gap-1.5 text-[9px] text-muted-foreground/65">
+            {issue.module}
             <span aria-hidden="true">·</span>
-            {metadata.module}
+            {issue.cycle}
           </span>
         </button>
       </TableCell>
@@ -102,18 +101,12 @@ function IssueRow({
       </TableCell>
       <TableCell className="min-w-40">
         <div className="flex items-center gap-1">
-          {issue.labels.map((label) => (
+          {issue.labels.slice(0, 3).map((label) => (
             <Badge className="font-normal" key={label} size="sm" variant="outline">
               {label}
             </Badge>
           ))}
         </div>
-      </TableCell>
-      <TableCell>
-        <span className="text-[11px] text-foreground/75">{metadata.module}</span>
-      </TableCell>
-      <TableCell>
-        <span className="text-[11px] text-muted-foreground">{metadata.cycle}</span>
       </TableCell>
       <TableCell className="min-w-36">
         <span className="flex items-center gap-2 text-[11px] text-foreground/80">
@@ -125,18 +118,19 @@ function IssueRow({
       </TableCell>
       <TableCell className="min-w-48 max-w-64">
         {workflow ? (
-          <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-foreground/75">
+          <button
+            className="flex min-w-0 items-center gap-1.5 text-left text-[11px] text-foreground/75 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={onOpen}
+            type="button"
+          >
             <WorkflowIcon aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
             <span className="truncate">{workflow.name}</span>
-          </span>
+          </button>
         ) : (
-          <Button className="h-auto p-0 text-[11px]" size="xs" variant="link">
+          <Button className="h-auto p-0 text-[11px]" onClick={onOpen} size="xs" variant="link">
             Attach workflow
           </Button>
         )}
-      </TableCell>
-      <TableCell>
-        <span className="font-mono text-[10px] text-muted-foreground">{metadata.queue}</span>
       </TableCell>
       <TableCell>
         <RunStateBadge state={issue.runState} />
@@ -145,7 +139,8 @@ function IssueRow({
         <div className="flex items-center justify-end gap-2">
           <span className="text-[10px] text-muted-foreground">{issue.updatedAt}</span>
           <Button
-            aria-label={`More actions for ${issue.identifier}`}
+            aria-label={`Open ${issue.identifier}`}
+            onClick={onOpen}
             size="icon-xs"
             variant="ghost"
           >
@@ -159,160 +154,165 @@ function IssueRow({
 
 export function IssuesPage() {
   const { selectedProject, snapshot } = useBaseWorkspace();
-  const [search, setSearch] = useState("");
-  const issues = snapshot.issues.filter(({ projectId }) => projectId === selectedProject.id);
-  const normalizedSearch = search.trim().toLocaleLowerCase();
-  const visibleIssues = normalizedSearch
-    ? issues.filter((issue) =>
-        [issue.identifier, issue.title, issue.assignee, ...issue.labels]
-          .join(" ")
-          .toLocaleLowerCase()
-          .includes(normalizedSearch),
-      )
-    : issues;
-  const activeIssues = issues.filter(({ runState }) => runState !== "idle").length;
-  const readyIssues = issues.filter(({ status }) => status === "Ready").length;
-  const attachedIssues = issues.filter(({ workflowId }) => workflowId !== null).length;
-  const workflowCoverage = issues.length ? Math.round((attachedIssues / issues.length) * 100) : 0;
+  const filters = useIssueWorkspaceStore(
+    (state) => state.filtersByProject[selectedProject.id] ?? DEFAULT_ISSUE_FILTERS,
+  );
+  const selectedIssueIds = useIssueWorkspaceStore((state) => state.selectedIssueIds);
+  const groupBy = useIssueWorkspaceStore(
+    (state) => state.groupByByProject[selectedProject.id] ?? "none",
+  );
+  const toggleIssueSelection = useIssueWorkspaceStore((state) => state.toggleIssueSelection);
+  const setIssueSelection = useIssueWorkspaceStore((state) => state.setIssueSelection);
+  const clearIssueSelection = useIssueWorkspaceStore((state) => state.clearIssueSelection);
+  const selectIssue = useIssueWorkspaceStore((state) => state.selectIssue);
+  const uiIntent = useIssueWorkspaceStore((state) => state.uiIntent);
+  const consumeUiIntent = useIssueWorkspaceStore((state) => state.consumeUiIntent);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [sort, setSort] = useState<"updated" | "priority">("updated");
+  const projectIssues = snapshot.issues.filter(({ projectId }) => projectId === selectedProject.id);
+  const filteredIssues = filterIssues(snapshot.issues, selectedProject.id, filters);
+  const visibleIssues = useMemo(
+    () =>
+      sort === "priority"
+        ? [...filteredIssues].toSorted(
+            (left, right) => PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority],
+          )
+        : filteredIssues,
+    [filteredIssues, sort],
+  );
   const workflowsById = new Map(snapshot.workflows.map((workflow) => [workflow.id, workflow]));
+  const visibleGroups = groupIssues(visibleIssues, groupBy);
+  const selectedSet = new Set(selectedIssueIds);
+  const visibleIssueIds = visibleIssues.map(({ id }) => id);
+  const allVisibleSelected =
+    visibleIssueIds.length > 0 && visibleIssueIds.every((issueId) => selectedSet.has(issueId));
+
+  useEffect(() => {
+    if (uiIntent?.type !== "queue-view" || uiIntent.projectId !== selectedProject.id) return;
+    clearIssueSelection();
+    setIssueSelection(uiIntent.issueIds, true);
+    setQueueOpen(true);
+    consumeUiIntent(uiIntent.id);
+  }, [clearIssueSelection, consumeUiIntent, selectedProject.id, setIssueSelection, uiIntent]);
 
   return (
-    <BasePageShell
-      actions={
-        <>
-          <Button size="sm" variant="outline">
-            <PlayIcon />
-            Queue selected
-          </Button>
-          <Button size="sm">
+    <>
+      <BasePageShell
+        actions={
+          <Button onClick={() => setCreateOpen(true)} size="sm">
             <PlusIcon />
             New issue
+            <span className="font-mono text-[9px] opacity-65">C</span>
           </Button>
-        </>
-      }
-      description="Plan work, attach reliable delivery paths, and track every issue through execution."
-      title="Issues"
-    >
-      <div className="space-y-4">
-        <BasePanel>
-          <div className="grid grid-cols-2 gap-y-4 px-4 py-3.5 sm:grid-cols-4">
-            <BaseMetricCard
-              detail="In the current project"
-              label="Total issues"
-              value={String(issues.length)}
-            />
-            <BaseMetricCard
-              detail="Queued, running, or in review"
-              label="Active automation"
-              tone="info"
-              value={String(activeIssues)}
-            />
-            <BaseMetricCard
-              detail="Eligible for a workflow run"
-              label="Ready"
-              tone="success"
-              value={String(readyIssues)}
-            />
-            <BaseMetricCard
-              detail={`${attachedIssues} of ${issues.length} issues covered`}
-              label="Workflow coverage"
-              tone="success"
-              value={`${workflowCoverage}%`}
-            />
-          </div>
-        </BasePanel>
-
-        <BasePanel description="Dense project view with execution context" title="All issues">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2.5">
-            <div className="relative min-w-56 flex-1 sm:max-w-80">
-              <SearchIcon
-                aria-hidden="true"
-                className="pointer-events-none absolute left-2.5 top-1/2 z-10 size-3.5 -translate-y-1/2 text-muted-foreground/65"
-              />
-              <Input
-                aria-label="Search issues"
-                className="h-7 bg-background pl-8 text-xs shadow-none"
-                onChange={(event) => setSearch(event.currentTarget.value)}
-                placeholder="Search issues, labels, or assignees…"
-                value={search}
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-1">
-              <Button size="xs" variant="secondary">
-                All issues
-                <span className="font-mono text-[9px] text-muted-foreground">{issues.length}</span>
-              </Button>
-              <Button size="xs" variant="ghost">
-                Active
-                <span className="font-mono text-[9px] text-muted-foreground">{activeIssues}</span>
-              </Button>
-              <Button size="xs" variant="ghost">
-                <SlidersHorizontalIcon />
-                Filter
-              </Button>
-              <Button size="xs" variant="ghost">
-                <ArrowUpDownIcon />
-                Updated
-              </Button>
-            </div>
+        }
+        density="workspace"
+        description="Plan work, attach reusable workflows, and keep execution history inside this project."
+        title="Issues"
+      >
+        <div className="overflow-hidden rounded-lg border border-border/60 bg-background shadow-xs">
+          <ProjectIssueViewBar
+            layout="list"
+            onRunView={(issueIds) => {
+              clearIssueSelection();
+              setIssueSelection(issueIds, true);
+              setQueueOpen(true);
+            }}
+            visibleIssueIds={visibleIssueIds}
+          />
+          <div className="flex items-center justify-end border-b border-border/60 px-3.5 py-1.5">
+            <Button
+              onClick={() => setSort((current) => (current === "updated" ? "priority" : "updated"))}
+              size="xs"
+              variant="ghost"
+            >
+              <ArrowUpDownIcon />
+              Sort: {sort === "updated" ? "Updated" : "Priority"}
+            </Button>
           </div>
 
-          <Table className="min-w-[1480px]">
+          {selectedIssueIds.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 border-b border-primary/20 bg-primary/5 px-3.5 py-2">
+              <span className="text-xs font-medium">{selectedIssueIds.length} selected</span>
+              <Button onClick={() => setQueueOpen(true)} size="xs" variant="secondary">
+                <PlayIcon />
+                Queue
+              </Button>
+              <Button className="ml-auto" onClick={clearIssueSelection} size="xs" variant="ghost">
+                <XIcon />
+                Clear
+              </Button>
+            </div>
+          ) : null}
+
+          <Table className="min-w-[1080px]">
             <TableHeader className="bg-muted/20">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-9 pl-3.5">
-                  <Checkbox aria-label="Select all visible issues" />
+                  <Checkbox
+                    aria-label="Select all visible issues"
+                    checked={allVisibleSelected}
+                    onCheckedChange={(checked) =>
+                      setIssueSelection(visibleIssueIds, checked === true)
+                    }
+                  />
                 </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Issue
-                </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Status
-                </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Priority
-                </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Labels
-                </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Module
-                </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Cycle
-                </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Assignee
-                </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Workflow
-                </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Queue
-                </TableHead>
-                <TableHead className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Run
-                </TableHead>
-                <TableHead className="pr-3.5 text-right text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Updated
-                </TableHead>
+                {[
+                  "Issue",
+                  "Status",
+                  "Priority",
+                  "Labels",
+                  "Assignee",
+                  "Workflow",
+                  "Run",
+                  "Updated",
+                ].map((heading) => (
+                  <TableHead
+                    className={
+                      heading === "Updated"
+                        ? "pr-3.5 text-right text-[10px] uppercase tracking-[0.08em] text-muted-foreground"
+                        : "text-[10px] uppercase tracking-[0.08em] text-muted-foreground"
+                    }
+                    key={heading}
+                  >
+                    {heading}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleIssues.map((issue) => (
-                <IssueRow
-                  issue={issue}
-                  key={issue.id}
-                  workflow={issue.workflowId ? workflowsById.get(issue.workflowId) : undefined}
-                />
+              {visibleGroups.map((group) => (
+                <Fragment key={group.key}>
+                  {groupBy !== "none" ? (
+                    <TableRow className="h-8 bg-muted/25 hover:bg-muted/25">
+                      <TableCell className="px-3.5" colSpan={9}>
+                        <span className="text-[10px] font-semibold text-foreground/75">
+                          {groupBy === "workflow"
+                            ? (workflowsById.get(group.key)?.name ?? group.key)
+                            : group.key}
+                        </span>
+                        <span className="ml-2 font-mono text-[9px] text-muted-foreground">
+                          {group.issues.length}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                  {group.issues.map((issue) => (
+                    <IssueRow
+                      issue={issue}
+                      key={issue.id}
+                      onOpen={() => selectIssue(issue.id)}
+                      onSelectedChange={(selected) => toggleIssueSelection(issue.id, selected)}
+                      selected={selectedSet.has(issue.id)}
+                      workflow={issue.workflowId ? workflowsById.get(issue.workflowId) : undefined}
+                    />
+                  ))}
+                </Fragment>
               ))}
               {visibleIssues.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell
-                    className="h-32 text-center text-xs text-muted-foreground"
-                    colSpan={12}
-                  >
-                    No issues match “{search}”.
+                  <TableCell className="h-32 text-center text-xs text-muted-foreground" colSpan={9}>
+                    No issues match the current project filters.
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -321,12 +321,16 @@ export function IssuesPage() {
 
           <div className="flex items-center justify-between border-t border-border/60 px-3.5 py-2 text-[10px] text-muted-foreground">
             <span>
-              Showing {visibleIssues.length} of {issues.length} issues
+              Showing {visibleIssues.length} of {projectIssues.length} project issues
             </span>
-            <span>Use ↑ and ↓ to move through the list</span>
+            <span>Click a row to open details · C creates an issue</span>
           </div>
-        </BasePanel>
-      </div>
-    </BasePageShell>
+        </div>
+      </BasePageShell>
+
+      <IssueCreateDialog onOpenChange={setCreateOpen} open={createOpen} />
+      <QueueIssuesDialog issueIds={selectedIssueIds} onOpenChange={setQueueOpen} open={queueOpen} />
+      <IssueInspector />
+    </>
   );
 }

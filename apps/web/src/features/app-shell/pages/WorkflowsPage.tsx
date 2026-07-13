@@ -63,7 +63,13 @@ function SuccessRate({ rate }: { readonly rate: number | null }) {
   );
 }
 
-function WorkflowRow({ workflow }: { readonly workflow: BaseWorkflowSummary }) {
+function WorkflowRow({
+  activeRunCount,
+  workflow,
+}: {
+  readonly activeRunCount: number;
+  readonly workflow: BaseWorkflowSummary;
+}) {
   return (
     <TableRow className="group h-[62px]">
       <TableCell className="min-w-[320px] whitespace-normal py-2.5 pl-3.5">
@@ -98,11 +104,9 @@ function WorkflowRow({ workflow }: { readonly workflow: BaseWorkflowSummary }) {
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-medium text-foreground">
-            {workflow.activeRuns}
-          </span>
+          <span className="font-mono text-xs font-medium text-foreground">{activeRunCount}</span>
           <span className="text-[10px] text-muted-foreground">
-            {workflow.activeRuns === 1 ? "run" : "runs"}
+            {activeRunCount === 1 ? "run" : "runs"}
           </span>
         </div>
       </TableCell>
@@ -133,7 +137,19 @@ export function WorkflowsPage() {
           measuredWorkflows.length,
       )
     : 0;
-  const activeRuns = snapshot.workflows.reduce((total, workflow) => total + workflow.activeRuns, 0);
+  const activeRunStatuses = new Set(["Queued", "Running", "Waiting"]);
+  const activeRunsByWorkflowId = new Map<string, number>();
+  for (const run of snapshot.runs) {
+    if (!activeRunStatuses.has(run.status)) continue;
+    activeRunsByWorkflowId.set(
+      run.workflowId,
+      (activeRunsByWorkflowId.get(run.workflowId) ?? 0) + 1,
+    );
+  }
+  const activeRuns = [...activeRunsByWorkflowId.values()].reduce(
+    (total, count) => total + count,
+    0,
+  );
 
   return (
     <BasePageShell
@@ -145,19 +161,19 @@ export function WorkflowsPage() {
           </Button>
           <Button size="sm">
             <PlusIcon />
-            New workflow
+            New template
           </Button>
         </>
       }
-      description="Define the repeatable paths agents use to plan, implement, validate, and deliver work."
+      description="Define reusable workflow templates that any project can assign to its issues."
       title="Workflows"
     >
       <div className="space-y-4">
         <BasePanel>
           <div className="grid grid-cols-2 gap-y-4 px-4 py-3.5 sm:grid-cols-4">
             <BaseMetricCard
-              detail="Reusable definitions"
-              label="Total"
+              detail="Available to every project"
+              label="Templates"
               value={String(snapshot.workflows.length)}
             />
             <BaseMetricCard
@@ -173,7 +189,7 @@ export function WorkflowsPage() {
               value={`${averageSuccessRate}%`}
             />
             <BaseMetricCard
-              detail="Running, queued, or waiting"
+              detail="Across all projects"
               label="Active runs"
               tone="info"
               value={String(activeRuns)}
@@ -182,21 +198,21 @@ export function WorkflowsPage() {
         </BasePanel>
 
         <BasePanel
-          description="Reusable execution definitions for this workspace"
-          title="Workflow library"
+          description="Workspace templates; project runs keep their own execution history"
+          title="Workflow templates"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2.5">
             <div className="relative min-w-56 flex-1 sm:max-w-72">
               <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/65" />
               <Input
-                aria-label="Search workflows"
+                aria-label="Search workflow templates"
                 className="h-7 bg-background pl-8 text-xs shadow-none"
-                placeholder="Search workflows…"
+                placeholder="Search templates…"
               />
             </div>
             <div className="flex items-center gap-1">
               <Button size="xs" variant="secondary">
-                All workflows
+                All templates
                 <span className="font-mono text-[9px] text-muted-foreground">
                   {snapshot.workflows.length}
                 </span>
@@ -237,7 +253,11 @@ export function WorkflowsPage() {
             </TableHeader>
             <TableBody>
               {snapshot.workflows.map((workflow) => (
-                <WorkflowRow key={workflow.id} workflow={workflow} />
+                <WorkflowRow
+                  activeRunCount={activeRunsByWorkflowId.get(workflow.id) ?? 0}
+                  key={workflow.id}
+                  workflow={workflow}
+                />
               ))}
             </TableBody>
           </Table>

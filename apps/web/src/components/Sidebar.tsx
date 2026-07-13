@@ -2796,10 +2796,10 @@ function useSidebarStageLabel() {
 
 const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const navigate = useNavigate();
-  const { snapshot } = useBaseWorkspace();
+  const { selectedProject, snapshot } = useBaseWorkspace();
   const { isMobile, setOpenMobile } = useSidebar();
-  const activeRunCount = selectActiveRunCount(snapshot);
-  const attentionCount = selectAttentionCount(snapshot);
+  const activeRunCount = selectActiveRunCount(snapshot, selectedProject.id);
+  const attentionCount = selectAttentionCount(snapshot, selectedProject.id);
   const handleSettingsClick = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);

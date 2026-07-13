@@ -7,6 +7,7 @@ import {
   type BaseWorkspaceRepository,
   type BaseWorkspaceSnapshot,
 } from "./workspaceRepository";
+import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
 
 const SELECTED_PROJECT_STORAGE_KEY = "base:selected-project";
 
@@ -57,7 +58,15 @@ export function BaseWorkspaceProvider({
   readonly children: ReactNode;
   readonly repository?: BaseWorkspaceRepository;
 }) {
-  const snapshot = repository.read();
+  const repositorySnapshot = repository.read();
+  const issues = useIssueWorkspaceStore((state) => state.issues);
+  const runs = useIssueWorkspaceStore((state) => state.runs);
+  const clearIssueSelection = useIssueWorkspaceStore((state) => state.clearIssueSelection);
+  const selectIssue = useIssueWorkspaceStore((state) => state.selectIssue);
+  const snapshot = useMemo(
+    () => ({ ...repositorySnapshot, issues, runs }),
+    [issues, repositorySnapshot, runs],
+  );
   const [selectedProjectId, setSelectedProjectId] = useState(() =>
     readInitialProjectId(repository),
   );
@@ -83,10 +92,12 @@ export function BaseWorkspaceProvider({
           return;
         }
         setSelectedProjectId(projectId);
+        selectIssue(null);
+        clearIssueSelection();
         persistSelectedProjectId(projectId);
       },
     }),
-    [repository, selectedProject, selectedRepository, snapshot],
+    [clearIssueSelection, repository, selectIssue, selectedProject, selectedRepository, snapshot],
   );
 
   return <BaseWorkspaceContext value={value}>{children}</BaseWorkspaceContext>;

@@ -47,6 +47,17 @@ export const MODEL_PICKER_KEYBINDING_COMMANDS = [
 ] as const;
 export type ModelPickerKeybindingCommand = (typeof MODEL_PICKER_KEYBINDING_COMMANDS)[number];
 
+export const ISSUE_KEYBINDING_COMMANDS = [
+  "issue.create",
+  "issue.search",
+  "issue.filters",
+  "issue.toggleLayout",
+  "issue.queueView",
+  "issue.goList",
+  "issue.goBoard",
+] as const;
+export type IssueKeybindingCommand = (typeof ISSUE_KEYBINDING_COMMANDS)[number];
+
 const STATIC_KEYBINDING_COMMANDS = [
   "sidebar.toggle",
   "terminal.toggle",
@@ -66,6 +77,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "chat.new",
   "chat.newLocal",
   "editor.openFavorite",
+  ...ISSUE_KEYBINDING_COMMANDS,
   ...MODEL_PICKER_KEYBINDING_COMMANDS,
   ...THREAD_KEYBINDING_COMMANDS,
 ] as const;
