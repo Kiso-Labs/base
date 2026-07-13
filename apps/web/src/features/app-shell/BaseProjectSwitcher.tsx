@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronDownIcon, GitBranchIcon } from "lucide-react";
+import { ChevronsUpDownIcon, GitBranchIcon } from "lucide-react";
 
 import {
   Menu,
@@ -23,49 +23,54 @@ export function BaseProjectSwitcher({ className }: { readonly className?: string
           <button
             type="button"
             className={cn(
-              "group flex w-full items-center gap-2 rounded-md border border-border/70 bg-background/35 px-2 py-2 text-left outline-hidden transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring",
+              "group flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left outline-hidden transition-colors hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-ring",
               className,
             )}
             aria-label="Switch project"
           />
         }
       >
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-[5px] border border-border bg-card text-[11px] font-semibold text-foreground shadow-sm/5">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-foreground text-[10px] font-semibold text-background shadow-sm ring-1 ring-foreground/10">
           {selectedProject.identifier.slice(0, 1)}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-medium text-foreground">
+          <span className="block truncate text-[12px] font-medium leading-4 text-foreground">
             {selectedProject.name}
           </span>
-          <span className="mt-0.5 flex items-center gap-1 truncate font-mono text-[10px] text-muted-foreground/75">
-            <GitBranchIcon className="size-3 shrink-0" />
+          <span className="flex items-center gap-1 truncate text-[10px] leading-3.5 text-muted-foreground/70">
+            <GitBranchIcon className="size-2.5 shrink-0" />
             {selectedRepository.fullName}
           </span>
         </span>
-        <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-popup-open:rotate-180" />
+        <ChevronsUpDownIcon className="size-3 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground" />
       </MenuTrigger>
-      <MenuPopup align="start" className="w-64" sideOffset={5}>
+      <MenuPopup align="start" className="w-64 p-1" sideOffset={4}>
         <MenuGroup>
-          <MenuGroupLabel>Kiso Labs projects</MenuGroupLabel>
+          <MenuGroupLabel className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
+            {snapshot.workspace.name} projects
+          </MenuGroupLabel>
           <MenuRadioGroup value={selectedProject.id} onValueChange={selectProject}>
             {snapshot.projects.map((project) => {
               const repository = snapshot.repositories.find(
                 ({ id }) => id === project.repositoryId,
               );
               return (
-                <MenuRadioItem className="gap-2.5" key={project.id} value={project.id}>
-                  <span className="flex size-6 items-center justify-center rounded-[5px] border border-border bg-card text-[10px] font-semibold">
+                <MenuRadioItem
+                  className="min-h-10 gap-2 rounded-md px-2 py-1.5 data-[checked]:bg-accent"
+                  key={project.id}
+                  value={project.id}
+                >
+                  <span className="flex size-6 items-center justify-center rounded-md bg-foreground text-[9px] font-semibold text-background ring-1 ring-foreground/10">
                     {project.identifier.slice(0, 1)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium">{project.name}</span>
-                    <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                    <span className="block truncate text-[12px] font-medium leading-4">
+                      {project.name}
+                    </span>
+                    <span className="block truncate text-[10px] leading-3.5 text-muted-foreground">
                       {repository?.fullName ?? "Repository unavailable"}
                     </span>
                   </span>
-                  {project.id === selectedProject.id ? (
-                    <CheckIcon className="size-3.5 text-primary" />
-                  ) : null}
                 </MenuRadioItem>
               );
             })}
