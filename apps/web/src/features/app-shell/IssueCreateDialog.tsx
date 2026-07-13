@@ -1,23 +1,22 @@
-import { LayoutTemplateIcon, PlusIcon } from "lucide-react";
+import {
+  CircleDashedIcon,
+  EllipsisIcon,
+  LayoutTemplateIcon,
+  PlusIcon,
+  SignalIcon,
+  WorkflowIcon,
+} from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { Button } from "~/components/ui/button";
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "~/components/ui/dialog";
+import { Dialog, DialogFooter, DialogPanel, DialogPopup } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
 
 import { useBaseWorkspace } from "./BaseWorkspaceContext";
 import { BASE_ISSUE_TEMPLATES, applyIssueTemplate, type IssueDraft } from "./issueRepository";
+import { IssueDialogHeader } from "./IssueDialogHeader";
+import { IssueMarkdownEditor } from "./IssueMarkdownEditor";
 import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
 import { IssuePropertySelect } from "./IssuePropertySelect";
 import { BASE_PRIORITIES, type BasePriority } from "./workspaceRepository";
@@ -48,6 +47,7 @@ export function IssueCreateDialog({
   const [workflowId, setWorkflowId] = useState("none");
   const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [showMoreFields, setShowMoreFields] = useState(false);
 
   useEffect(() => {
     if (uiIntent?.type !== "create" || uiIntent.projectId !== selectedProject.id) return;
@@ -68,6 +68,7 @@ export function IssueCreateDialog({
     setWorkflowId("none");
     setSelectedTemplateId("blank");
     setTitleError(null);
+    setShowMoreFields(false);
   }, [initialStatus, open]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -136,54 +137,16 @@ export function IssueCreateDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogPopup className="max-w-2xl overflow-hidden p-0">
-        <DialogHeader className="px-5 pb-4 pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="flex size-6 items-center justify-center rounded-md bg-primary/10 font-mono text-[10px] font-bold text-primary">
-              {selectedProject.identifier}
-            </span>
-            Create issue
-          </DialogTitle>
-          <DialogDescription>
-            Add work to {selectedProject.name}. It starts in {status} and stays attached to this
-            project.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogPanel className="space-y-0 p-0">
-          <div className="border-y border-border/60 bg-muted/20 px-5 py-3">
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              <LayoutTemplateIcon className="size-3" />
-              Start from a template
-            </div>
-            <div className="grid gap-2 sm:grid-cols-4">
-              <button
-                className="rounded-md border border-border/70 bg-background px-3 py-2 text-left transition-colors hover:bg-muted/50 data-[active=true]:border-primary/50 data-[active=true]:bg-primary/5"
-                data-active={selectedTemplateId === "blank"}
-                onClick={() => chooseTemplate("blank")}
-                type="button"
-              >
-                <span className="block text-xs font-medium">Blank issue</span>
-                <span className="mt-0.5 block text-[9px] text-muted-foreground">Start clean</span>
-              </button>
-              {BASE_ISSUE_TEMPLATES.map((template) => (
-                <button
-                  className="rounded-md border border-border/70 bg-background px-3 py-2 text-left transition-colors hover:bg-muted/50 data-[active=true]:border-primary/50 data-[active=true]:bg-primary/5"
-                  data-active={selectedTemplateId === template.id}
-                  key={template.id}
-                  onClick={() => chooseTemplate(template.id)}
-                  title={template.description}
-                  type="button"
-                >
-                  <span className="block truncate text-xs font-medium">{template.name}</span>
-                  <span className="mt-0.5 block truncate text-[9px] text-muted-foreground">
-                    {template.defaults.priority} · {template.defaults.status}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
+      <DialogPopup className="h-[min(46rem,calc(100dvh-2rem))] max-w-5xl overflow-hidden p-0">
+        <IssueDialogHeader
+          description={`Create an issue in ${selectedProject.name}.`}
+          label="New issue"
+          projectIdentifier={selectedProject.identifier}
+          projectName={selectedProject.name}
+        />
+        <DialogPanel className="p-0" scrollFade={false}>
           <form
-            className="space-y-4 px-5 py-4"
+            className="flex min-h-full flex-col px-7 py-6 sm:px-10 sm:py-8"
             id={formId}
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -193,40 +156,36 @@ export function IssueCreateDialog({
             }}
             onSubmit={submit}
           >
-            <div className="space-y-1.5">
-              <Label className="sr-only" htmlFor={`${formId}-title`}>
-                Title
-              </Label>
+            <div>
               <Input
                 aria-invalid={titleError ? true : undefined}
                 autoFocus
-                className="h-11 border-0 bg-transparent px-0 text-lg font-medium shadow-none focus-visible:ring-0"
+                aria-label="Issue title"
+                className="h-14 rounded-none border-0 bg-transparent px-0 font-heading text-2xl font-semibold shadow-none before:hidden placeholder:text-muted-foreground/55 has-focus-visible:border-transparent has-focus-visible:ring-0 sm:text-3xl"
                 id={`${formId}-title`}
                 onChange={(event) => {
                   setTitle(event.currentTarget.value);
                   if (titleError) setTitleError(null);
                 }}
-                placeholder="What needs to be done?"
+                placeholder="Issue title"
+                unstyled
                 value={title}
               />
               {titleError ? (
                 <p className="text-xs text-destructive-foreground">{titleError}</p>
               ) : null}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="sr-only" htmlFor={`${formId}-description`}>
-                Description
-              </Label>
-              <Textarea
-                className="min-h-32 resize-y border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              <IssueMarkdownEditor
+                className="mt-3 min-h-56"
                 id={`${formId}-description`}
-                onChange={(event) => setDescription(event.currentTarget.value)}
-                placeholder="Add context, constraints, or acceptance criteria…"
+                onChange={setDescription}
+                placeholder="Add description… Markdown is supported"
                 value={description}
               />
             </div>
-            <div className="grid gap-3 rounded-lg border border-border/60 bg-muted/15 p-3 sm:grid-cols-2">
+
+            <div className="mt-auto flex flex-wrap items-center gap-2 pt-8">
               <IssuePropertySelect
+                icon={<CircleDashedIcon />}
                 label="Status"
                 onValueChange={(value) => setStatus(value as BaseIssueStatus)}
                 options={[
@@ -234,59 +193,139 @@ export function IssueCreateDialog({
                   { label: "Planned", value: "Planned" },
                   { label: "Ready", value: "Ready" },
                 ]}
+                size="sm"
                 value={status}
+                variant="pill"
               />
               <IssuePropertySelect
+                icon={<SignalIcon />}
                 label="Priority"
                 onValueChange={(value) => setPriority(value as BasePriority)}
                 options={BASE_PRIORITIES.map((value) => ({ label: value, value }))}
+                size="sm"
                 value={priority}
+                variant="pill"
               />
               <IssuePropertySelect
+                icon={<WorkflowIcon />}
                 label="Workflow template"
                 onValueChange={setWorkflowId}
                 options={workflowOptions}
+                size="sm"
                 value={workflowId}
+                variant="pill"
               />
-              <IssueTextProperty
-                label="Assignee"
-                onChange={setAssignee}
-                placeholder="Unassigned"
-                value={assignee}
-              />
-              <IssueTextProperty
-                label="Labels"
-                onChange={setLabels}
-                placeholder="bug, frontend"
-                value={labels}
-              />
-              <IssueTextProperty
-                label="Module"
-                onChange={setModule}
-                placeholder="Unassigned"
-                value={module}
-              />
-              <IssueTextProperty
-                label="Cycle"
-                onChange={setCycle}
-                placeholder="Unscheduled"
-                value={cycle}
-              />
+              <Button
+                aria-expanded={showMoreFields}
+                aria-label="More issue fields"
+                className="rounded-full"
+                onClick={() => setShowMoreFields((visible) => !visible)}
+                size="icon-sm"
+                type="button"
+                variant="outline"
+              >
+                <EllipsisIcon />
+              </Button>
             </div>
+
+            {showMoreFields ? (
+              <div className="mt-5 rounded-xl border border-border/60 bg-muted/15 p-4">
+                <div className="mb-4 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <LayoutTemplateIcon className="size-3.5" />
+                  Start from a template
+                </div>
+                <div className="grid gap-2 sm:grid-cols-4">
+                  <TemplateButton
+                    active={selectedTemplateId === "blank"}
+                    detail="Start clean"
+                    label="Blank issue"
+                    onClick={() => chooseTemplate("blank")}
+                  />
+                  {BASE_ISSUE_TEMPLATES.map((template) => (
+                    <TemplateButton
+                      active={selectedTemplateId === template.id}
+                      detail={`${template.defaults.priority} · ${template.defaults.status}`}
+                      key={template.id}
+                      label={template.name}
+                      onClick={() => chooseTemplate(template.id)}
+                      title={template.description}
+                    />
+                  ))}
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <IssueTextProperty
+                    label="Assignee"
+                    onChange={setAssignee}
+                    placeholder="Unassigned"
+                    value={assignee}
+                  />
+                  <IssueTextProperty
+                    label="Labels"
+                    onChange={setLabels}
+                    placeholder="bug, frontend"
+                    value={labels}
+                  />
+                  <IssueTextProperty
+                    label="Module"
+                    onChange={setModule}
+                    placeholder="Unassigned"
+                    value={module}
+                  />
+                  <IssueTextProperty
+                    label="Cycle"
+                    onChange={setCycle}
+                    placeholder="Unscheduled"
+                    value={cycle}
+                  />
+                </div>
+              </div>
+            ) : null}
           </form>
         </DialogPanel>
-        <DialogFooter className="border-t border-border/60 bg-muted/15 px-5 py-3">
-          <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
-            Cancel
-          </Button>
-          <Button form={formId} type="submit">
-            <PlusIcon />
-            Create issue
-            <span className="ml-1 font-mono text-[9px] opacity-65">⌘↵</span>
-          </Button>
+        <DialogFooter className="items-center border-t border-border/50 bg-background/95 px-6 py-3 sm:justify-between">
+          <span className="hidden text-xs text-muted-foreground sm:block">
+            Markdown renders automatically when you leave the description.
+          </span>
+          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+            <Button onClick={() => onOpenChange(false)} type="button" variant="ghost">
+              Cancel
+            </Button>
+            <Button form={formId} type="submit">
+              <PlusIcon />
+              Create issue
+              <span className="ml-1 font-mono text-[9px] opacity-65">⌘↵</span>
+            </Button>
+          </div>
         </DialogFooter>
       </DialogPopup>
     </Dialog>
+  );
+}
+
+function TemplateButton({
+  active,
+  detail,
+  label,
+  onClick,
+  title,
+}: {
+  readonly active: boolean;
+  readonly detail: string;
+  readonly label: string;
+  readonly onClick: () => void;
+  readonly title?: string;
+}) {
+  return (
+    <button
+      className="rounded-lg border border-border/70 bg-background px-3 py-2 text-left transition-colors hover:bg-muted/50 data-[active=true]:border-primary/50 data-[active=true]:bg-primary/5"
+      data-active={active}
+      onClick={onClick}
+      title={title}
+      type="button"
+    >
+      <span className="block truncate text-xs font-medium">{label}</span>
+      <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{detail}</span>
+    </button>
   );
 }
 

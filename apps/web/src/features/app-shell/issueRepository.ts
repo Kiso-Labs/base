@@ -30,6 +30,8 @@ export type IssueViewGroupBy =
   | "module"
   | "cycle";
 
+export const DEFAULT_ISSUE_GROUP_BY = "status" as const satisfies IssueViewGroupBy;
+
 export interface BaseIssueView {
   readonly id: string;
   readonly projectId: string;
@@ -306,7 +308,7 @@ export function createDefaultIssueViews(
       kind: "system" as const,
       name: "All issues",
       layout: "list" as const,
-      groupBy: "status" as const,
+      groupBy: DEFAULT_ISSUE_GROUP_BY,
       filters: DEFAULT_ISSUE_FILTERS,
     },
     {

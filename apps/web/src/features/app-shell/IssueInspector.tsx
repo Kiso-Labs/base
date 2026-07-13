@@ -1,31 +1,26 @@
 import {
   ActivityIcon,
+  CircleDashedIcon,
+  EllipsisIcon,
   GitBranchIcon,
   ListChecksIcon,
   PlayIcon,
   SaveIcon,
+  SignalIcon,
   WorkflowIcon,
-  XIcon,
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
-import { RightPanelSheet } from "~/components/RightPanelSheet";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { Dialog, DialogFooter, DialogPanel, DialogPopup } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import {
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetPanel,
-  SheetTitle,
-} from "~/components/ui/sheet";
-import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
 
-import { IssueStatusBadge, PriorityLabel } from "./BaseEntityPills";
 import { useBaseWorkspace } from "./BaseWorkspaceContext";
+import { IssueDialogHeader } from "./IssueDialogHeader";
+import { IssueMarkdownEditor } from "./IssueMarkdownEditor";
 import { IssuePropertySelect } from "./IssuePropertySelect";
 import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
 import {
@@ -53,19 +48,20 @@ export function IssueInspector() {
   };
 
   return (
-    <RightPanelSheet onClose={close} open={Boolean(issue)}>
-      {issue ? <IssueInspectorPanel issue={issue} key={issue.id} onClose={close} /> : null}
-    </RightPanelSheet>
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+      open={Boolean(issue)}
+    >
+      <DialogPopup className="h-[min(46rem,calc(100dvh-2rem))] max-w-5xl overflow-hidden p-0">
+        {issue ? <IssueInspectorPanel issue={issue} key={issue.id} /> : null}
+      </DialogPopup>
+    </Dialog>
   );
 }
 
-function IssueInspectorPanel({
-  issue,
-  onClose,
-}: {
-  readonly issue: BaseIssueSummary;
-  readonly onClose: () => void;
-}) {
+function IssueInspectorPanel({ issue }: { readonly issue: BaseIssueSummary }) {
   const { selectedProject, selectedRepository, snapshot } = useBaseWorkspace();
   const updateIssue = useIssueWorkspaceStore((state) => state.updateIssue);
   const assignWorkflow = useIssueWorkspaceStore((state) => state.assignWorkflow);
@@ -80,6 +76,7 @@ function IssueInspectorPanel({
   const [cycle, setCycle] = useState(issue.cycle);
   const [assignee, setAssignee] = useState(issue.assignee);
   const [branch, setBranch] = useState(issue.branch);
+  const [showMoreFields, setShowMoreFields] = useState(false);
   const latestRun = snapshot.runs.find(
     (run) => run.id === issue.latestRunId && run.projectId === selectedProject.id,
   );
@@ -203,177 +200,202 @@ function IssueInspectorPanel({
 
   return (
     <>
-      <SheetHeader className="border-b border-border/60 px-5 py-4">
-        <div className="flex items-start justify-between gap-3 pr-8">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-[10px] font-semibold text-muted-foreground">
-                {issue.identifier}
-              </span>
-              <IssueStatusBadge status={issue.status} />
-              <PriorityLabel priority={issue.priority} />
-            </div>
-            <SheetTitle className="mt-2 truncate text-base">{issue.title}</SheetTitle>
-            <SheetDescription className="mt-1 text-xs">
-              {selectedProject.name} · {selectedRepository.fullName}
-            </SheetDescription>
-          </div>
-          <Button
-            aria-label="Close issue inspector"
-            onClick={onClose}
-            size="icon-xs"
-            variant="ghost"
-          >
-            <XIcon />
-          </Button>
-        </div>
-      </SheetHeader>
+      <IssueDialogHeader
+        description={`Edit ${issue.identifier} in ${selectedProject.name} · ${selectedRepository.fullName}.`}
+        label={issue.identifier}
+        projectIdentifier={selectedProject.identifier}
+        projectName={selectedProject.name}
+      />
 
-      <SheetPanel className="space-y-5 px-5 py-4">
-        <form className="space-y-4" id={`issue-form-${issue.id}`} onSubmit={save}>
-          <div className="space-y-1.5">
-            <Label className="sr-only" htmlFor={`${issue.id}-title`}>
-              Title
-            </Label>
+      <DialogPanel className="p-0" scrollFade={false}>
+        <form
+          className="flex min-h-full flex-col px-7 py-6 sm:px-10 sm:py-8"
+          id={`issue-form-${issue.id}`}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.requestSubmit();
+            }
+          }}
+          onSubmit={save}
+        >
+          <div>
             <Input
-              className="h-10 border-0 bg-transparent px-0 text-base font-medium shadow-none focus-visible:ring-0"
+              aria-label="Issue title"
+              className="h-14 rounded-none border-0 bg-transparent px-0 font-heading text-2xl font-semibold shadow-none before:hidden has-focus-visible:border-transparent has-focus-visible:ring-0 sm:text-3xl"
               id={`${issue.id}-title`}
               onChange={(event) => setTitle(event.currentTarget.value)}
+              unstyled
               value={title}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="sr-only" htmlFor={`${issue.id}-description`}>
-              Description
-            </Label>
-            <Textarea
-              className="min-h-28 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+            <IssueMarkdownEditor
+              className="mt-3 min-h-56"
               id={`${issue.id}-description`}
-              onChange={(event) => setDescription(event.currentTarget.value)}
-              placeholder="Add context or acceptance criteria…"
+              onChange={setDescription}
+              placeholder="Add description… Markdown is supported"
               value={description}
             />
           </div>
 
-          <div className="grid gap-3 rounded-lg border border-border/60 bg-muted/15 p-3 sm:grid-cols-2">
+          <div className="mt-auto flex flex-wrap items-center gap-2 pt-8">
             <IssuePropertySelect
+              icon={<CircleDashedIcon />}
               label="Status"
               onValueChange={setStatus}
               options={BASE_ISSUE_STATUSES.map((status) => ({ label: status, value: status }))}
+              size="sm"
               value={issue.status}
+              variant="pill"
             />
             <IssuePropertySelect
+              icon={<SignalIcon />}
               label="Priority"
               onValueChange={(value) => setPriority(value as BasePriority)}
               options={BASE_PRIORITIES.map((value) => ({ label: value, value }))}
+              size="sm"
               value={priority}
+              variant="pill"
             />
             <IssuePropertySelect
               disabled={issue.status === "Queued" || issue.status === "Running"}
+              icon={<WorkflowIcon />}
               label="Workflow template"
               onValueChange={setWorkflow}
               options={workflowOptions}
+              size="sm"
               value={issue.workflowId ?? "none"}
+              variant="pill"
             />
-            <IssueTextProperty label="Assignee" onChange={setAssignee} value={assignee} />
-            <IssueTextProperty label="Module" onChange={setModule} value={module} />
-            <IssueTextProperty label="Cycle" onChange={setCycle} value={cycle} />
+            <Button
+              aria-expanded={showMoreFields}
+              aria-label="More issue fields and activity"
+              className="rounded-full"
+              onClick={() => setShowMoreFields((visible) => !visible)}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <EllipsisIcon />
+            </Button>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor={`${issue.id}-labels`}>Labels</Label>
-            <Input
-              id={`${issue.id}-labels`}
-              onChange={(event) => setLabels(event.currentTarget.value)}
-              placeholder="bug, frontend"
-              value={labels}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${issue.id}-branch`}>Target branch</Label>
-            <div className="relative">
-              <GitBranchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-8 font-mono text-xs"
-                id={`${issue.id}-branch`}
-                onChange={(event) => setBranch(event.currentTarget.value)}
-                value={branch}
-              />
-            </div>
-          </div>
-        </form>
-
-        <InspectorSection icon={<WorkflowIcon />} title="Workflow and execution">
-          {issue.workflowId ? (
-            <p className="text-xs text-foreground/80">
-              {snapshot.workflows.find(({ id }) => id === issue.workflowId)?.name ??
-                "Unknown template"}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">No reusable workflow template assigned.</p>
-          )}
-          {latestRun ? (
-            <div className="mt-2 rounded-md border border-border/60 bg-muted/20 p-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[10px] font-semibold">{latestRun.id}</span>
-                <Badge size="sm" variant="outline">
-                  {latestRun.status}
-                </Badge>
+          {showMoreFields ? (
+            <div className="mt-5 rounded-xl border border-border/60 bg-muted/15 p-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <IssueTextProperty label="Assignee" onChange={setAssignee} value={assignee} />
+                <IssueTextProperty label="Module" onChange={setModule} value={module} />
+                <IssueTextProperty label="Cycle" onChange={setCycle} value={cycle} />
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${issue.id}-labels`}>Labels</Label>
+                  <Input
+                    id={`${issue.id}-labels`}
+                    onChange={(event) => setLabels(event.currentTarget.value)}
+                    placeholder="bug, frontend"
+                    value={labels}
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor={`${issue.id}-branch`}>Target branch</Label>
+                  <div className="relative">
+                    <GitBranchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-8 font-mono text-xs"
+                      id={`${issue.id}-branch`}
+                      onChange={(event) => setBranch(event.currentTarget.value)}
+                      value={branch}
+                    />
+                  </div>
+                </div>
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">{latestRun.currentStep}</p>
-              <p className="mt-1 font-mono text-[9px] text-muted-foreground/70">
-                Project run · {latestRun.startedAt}
-              </p>
+
+              <div className="mt-5 grid gap-5 lg:grid-cols-3">
+                <InspectorSection icon={<WorkflowIcon />} title="Workflow and execution">
+                  {issue.workflowId ? (
+                    <p className="text-xs text-foreground/80">
+                      {snapshot.workflows.find(({ id }) => id === issue.workflowId)?.name ??
+                        "Unknown template"}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No reusable workflow template assigned.
+                    </p>
+                  )}
+                  {latestRun ? (
+                    <div className="mt-2 rounded-md border border-border/60 bg-background/70 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[10px] font-semibold">{latestRun.id}</span>
+                        <Badge size="sm" variant="outline">
+                          {latestRun.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {latestRun.currentStep}
+                      </p>
+                      <p className="mt-1 font-mono text-[9px] text-muted-foreground/70">
+                        Project run · {latestRun.startedAt}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-muted-foreground/70">
+                      No runs for this issue.
+                    </p>
+                  )}
+                </InspectorSection>
+
+                <InspectorSection icon={<ListChecksIcon />} title="Dependencies">
+                  {dependencies.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {dependencies.map((dependency) => (
+                        <Badge key={dependency.id} size="sm" variant="outline">
+                          {dependency.identifier} · {dependency.status}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No blocking dependencies.</p>
+                  )}
+                </InspectorSection>
+
+                <InspectorSection icon={<ActivityIcon />} title="Activity">
+                  <ol className="space-y-2">
+                    {[...issue.activity].toReversed().map((entry) => (
+                      <li className="flex items-start justify-between gap-3 text-xs" key={entry.id}>
+                        <span className="text-foreground/80">{entry.label}</span>
+                        <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
+                          {entry.createdAt}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </InspectorSection>
+              </div>
             </div>
-          ) : (
-            <p className="mt-2 text-[11px] text-muted-foreground/70">No runs for this issue.</p>
-          )}
-        </InspectorSection>
+          ) : null}
+        </form>
+      </DialogPanel>
 
-        <InspectorSection icon={<ListChecksIcon />} title="Dependencies">
-          {dependencies.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {dependencies.map((dependency) => (
-                <Badge key={dependency.id} size="sm" variant="outline">
-                  {dependency.identifier} · {dependency.status}
-                </Badge>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">No blocking dependencies.</p>
-          )}
-        </InspectorSection>
-
-        <InspectorSection icon={<ActivityIcon />} title="Activity">
-          <ol className="space-y-2">
-            {[...issue.activity].toReversed().map((entry) => (
-              <li className="flex items-start justify-between gap-3 text-xs" key={entry.id}>
-                <span className="text-foreground/80">{entry.label}</span>
-                <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
-                  {entry.createdAt}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </InspectorSection>
-      </SheetPanel>
-
-      <SheetFooter className="px-5">
-        <Button
-          disabled={queueAction.disabled}
-          onClick={queueOrDequeue}
-          title={queueAction.label}
-          type="button"
-          variant="outline"
-        >
-          <PlayIcon />
-          {queueAction.label}
-        </Button>
-        <Button form={`issue-form-${issue.id}`} type="submit">
-          <SaveIcon />
-          Save issue
-        </Button>
-      </SheetFooter>
+      <DialogFooter className="items-center border-t border-border/50 bg-background/95 px-6 py-3 sm:justify-between">
+        <span className="hidden text-xs text-muted-foreground sm:block">
+          Markdown renders automatically when you leave the description.
+        </span>
+        <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+          <Button
+            disabled={queueAction.disabled}
+            onClick={queueOrDequeue}
+            title={queueAction.label}
+            type="button"
+            variant="outline"
+          >
+            <PlayIcon />
+            {queueAction.label}
+          </Button>
+          <Button form={`issue-form-${issue.id}`} type="submit">
+            <SaveIcon />
+            Save issue
+            <span className="ml-1 font-mono text-[9px] opacity-65">⌘↵</span>
+          </Button>
+        </div>
+      </DialogFooter>
     </>
   );
 }

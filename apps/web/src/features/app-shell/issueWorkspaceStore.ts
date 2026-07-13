@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { resolveStorage } from "~/lib/storage";
 
 import {
+  DEFAULT_ISSUE_GROUP_BY,
   DEFAULT_ISSUE_FILTERS,
   assignIssueWorkflow,
   createDefaultIssueViews,
@@ -82,7 +83,7 @@ const initialFiltersByProject: Readonly<Record<string, IssueFilters>> = Object.f
   initialSnapshot.projects.map(({ id }) => [id, DEFAULT_ISSUE_FILTERS]),
 );
 const initialGroupByByProject: Readonly<Record<string, IssueViewGroupBy>> = Object.fromEntries(
-  initialSnapshot.projects.map(({ id }) => [id, "status" as const]),
+  initialSnapshot.projects.map(({ id }) => [id, DEFAULT_ISSUE_GROUP_BY]),
 );
 const initialActiveViewIdByProject: Readonly<Record<string, string | null>> = Object.fromEntries(
   initialSnapshot.projects.map(({ id }) => [id, `view-${id}-all`]),

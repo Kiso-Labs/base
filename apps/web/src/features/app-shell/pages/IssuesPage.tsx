@@ -18,6 +18,7 @@ import {
   SignalMediumIcon,
   WorkflowIcon,
   XIcon,
+  type LucideIcon,
 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
@@ -31,33 +32,86 @@ import { useBaseWorkspace } from "../BaseWorkspaceContext";
 import { IssueCreateDialog } from "../IssueCreateDialog";
 import { IssueInspector } from "../IssueInspector";
 import {
+  DEFAULT_ISSUE_GROUP_BY,
   DEFAULT_ISSUE_FILTERS,
   filterIssues,
   groupIssues,
-  type IssueViewGroupBy,
 } from "../issueRepository";
 import { useIssueWorkspaceStore } from "../issueWorkspaceStore";
 import { ProjectIssueViewBar } from "../ProjectIssueViewBar";
 import { QueueIssuesDialog } from "../QueueIssuesDialog";
-import type {
-  BaseIssueStatus,
-  BaseIssueSummary,
-  BasePriority,
-  BaseWorkflowSummary,
+import {
+  BASE_ISSUE_STATUSES,
+  type BaseIssueStatus,
+  type BaseIssueSummary,
+  type BasePriority,
+  type BaseWorkflowSummary,
 } from "../workspaceRepository";
 
 const PRIORITY_ORDER = { Urgent: 0, High: 1, Medium: 2, Low: 3, None: 4 } as const;
 
-const STATUS_LABELS: Readonly<Record<BaseIssueStatus, string>> = {
-  Backlog: "Backlog",
-  Planned: "Planned",
-  Ready: "Ready",
-  Queued: "Queued",
-  Running: "In progress",
-  Blocked: "Blocked",
-  Review: "In review",
-  Done: "Done",
-};
+interface IssueIconPresentation {
+  readonly className: string;
+  readonly Icon: LucideIcon;
+  readonly label: string;
+}
+
+const STATUS_PRESENTATION = {
+  Backlog: {
+    className: "text-muted-foreground/60",
+    Icon: CircleDashedIcon,
+    label: "Backlog",
+  },
+  Planned: {
+    className: "text-muted-foreground/60",
+    Icon: CircleDotDashedIcon,
+    label: "Planned",
+  },
+  Ready: { className: "text-muted-foreground/60", Icon: CircleIcon, label: "Ready" },
+  Queued: { className: "text-warning", Icon: CirclePauseIcon, label: "Queued" },
+  Running: { className: "text-info", Icon: LoaderCircleIcon, label: "In progress" },
+  Blocked: {
+    className: "text-destructive-foreground",
+    Icon: OctagonXIcon,
+    label: "Blocked",
+  },
+  Review: { className: "text-success", Icon: CircleSlashIcon, label: "In review" },
+  Done: { className: "text-success", Icon: CircleCheckIcon, label: "Done" },
+} as const satisfies Readonly<Record<BaseIssueStatus, IssueIconPresentation>>;
+
+const PRIORITY_PRESENTATION = {
+  Urgent: {
+    className: "text-destructive-foreground",
+    Icon: SignalHighIcon,
+    label: "Urgent priority",
+  },
+  High: {
+    className: "text-warning-foreground",
+    Icon: SignalHighIcon,
+    label: "High priority",
+  },
+  Medium: {
+    className: "text-foreground/60",
+    Icon: SignalMediumIcon,
+    label: "Medium priority",
+  },
+  Low: {
+    className: "text-muted-foreground/55",
+    Icon: SignalLowIcon,
+    label: "Low priority",
+  },
+  None: {
+    className: "text-muted-foreground/55",
+    Icon: EllipsisIcon,
+    label: "No priority",
+  },
+} as const satisfies Readonly<Record<BasePriority, IssueIconPresentation>>;
+
+const ISSUE_STATUS_KEYS = new Set<string>(BASE_ISSUE_STATUSES);
+
+function isIssueStatus(value: string): value is BaseIssueStatus {
+  return ISSUE_STATUS_KEYS.has(value);
+}
 
 function RunStateBadge({ state }: { readonly state: BaseIssueSummary["runState"] }) {
   const presentation = {
@@ -76,84 +130,47 @@ function RunStateBadge({ state }: { readonly state: BaseIssueSummary["runState"]
 }
 
 function IssueStatusIcon({ status }: { readonly status: BaseIssueStatus }) {
-  const Icon =
-    status === "Backlog"
-      ? CircleDashedIcon
-      : status === "Planned"
-        ? CircleDotDashedIcon
-        : status === "Ready"
-          ? CircleIcon
-          : status === "Queued"
-            ? CirclePauseIcon
-            : status === "Running"
-              ? LoaderCircleIcon
-              : status === "Blocked"
-                ? OctagonXIcon
-                : status === "Review"
-                  ? CircleSlashIcon
-                  : CircleCheckIcon;
+  const { className, Icon, label } = STATUS_PRESENTATION[status];
 
-  return (
-    <Icon
-      aria-label={STATUS_LABELS[status]}
-      className={cn(
-        "size-4 shrink-0 stroke-[2.25]",
-        (status === "Backlog" || status === "Planned" || status === "Ready") &&
-          "text-muted-foreground/60",
-        status === "Queued" && "text-warning",
-        status === "Running" && "text-info",
-        status === "Blocked" && "text-destructive-foreground",
-        (status === "Review" || status === "Done") && "text-success",
-      )}
-    />
-  );
+  return <Icon aria-label={label} className={cn("size-4 shrink-0 stroke-[2.25]", className)} />;
 }
 
 function PriorityIcon({ priority }: { readonly priority: BasePriority }) {
-  const Icon =
-    priority === "Urgent" || priority === "High"
-      ? SignalHighIcon
-      : priority === "Medium"
-        ? SignalMediumIcon
-        : priority === "Low"
-          ? SignalLowIcon
-          : EllipsisIcon;
+  const { className, Icon, label } = PRIORITY_PRESENTATION[priority];
 
   return (
     <span
-      aria-label={`${priority} priority`}
-      className={cn(
-        "flex size-4 shrink-0 items-center justify-center",
-        priority === "Urgent" && "text-destructive-foreground",
-        priority === "High" && "text-warning-foreground",
-        priority === "Medium" && "text-foreground/60",
-        (priority === "Low" || priority === "None") && "text-muted-foreground/55",
-      )}
+      aria-label={label}
+      className={cn("flex size-4 shrink-0 items-center justify-center", className)}
     >
       <Icon aria-hidden="true" className="size-4" />
     </span>
   );
 }
 
-function IssueGroupHeader({
+function StatusGroupHeader({
   count,
-  groupBy,
-  label,
+  status,
 }: {
   readonly count: number;
-  readonly groupBy: IssueViewGroupBy;
-  readonly label: string;
+  readonly status: BaseIssueStatus;
 }) {
   return (
     <div className="flex h-10 items-center gap-2 border-y border-border/55 bg-muted/20 px-3.5 first:border-t-0">
-      {groupBy === "status" ? (
-        <IssueStatusIcon status={label as BaseIssueStatus} />
-      ) : (
-        <Layers3Icon aria-hidden="true" className="size-4 text-muted-foreground/55" />
-      )}
+      <IssueStatusIcon status={status} />
       <span className="text-xs font-medium text-foreground/85">
-        {groupBy === "status" ? STATUS_LABELS[label as BaseIssueStatus] : label}
+        {STATUS_PRESENTATION[status].label}
       </span>
+      <span className="font-mono text-[11px] text-muted-foreground/65">{count}</span>
+    </div>
+  );
+}
+
+function PropertyGroupHeader({ count, label }: { readonly count: number; readonly label: string }) {
+  return (
+    <div className="flex h-10 items-center gap-2 border-y border-border/55 bg-muted/20 px-3.5 first:border-t-0">
+      <Layers3Icon aria-hidden="true" className="size-4 text-muted-foreground/55" />
+      <span className="text-xs font-medium text-foreground/85">{label}</span>
       <span className="font-mono text-[11px] text-muted-foreground/65">{count}</span>
     </div>
   );
@@ -176,7 +193,7 @@ function IssueRow({
 
   return (
     <div
-      className="group grid h-12 grid-cols-[2rem_1.25rem_minmax(13rem,1fr)_auto] items-center border-b border-border/45 px-2 transition-colors last:border-b-0 hover:bg-muted/30 data-[selected]:bg-primary/10 data-[selected]:hover:bg-primary/[0.13]"
+      className="group grid h-12 grid-cols-[2rem_1.25rem_minmax(13rem,1fr)_auto] items-center border-b border-border/45 px-2 transition-colors last:border-b-0 hover:bg-muted/30 data-[selected]:border-primary/10 data-[selected]:bg-primary/10 data-[selected]:hover:bg-primary/[0.13]"
       data-selected={selected || undefined}
       role="listitem"
     >
@@ -264,7 +281,7 @@ export function IssuesPage() {
   );
   const selectedIssueIds = useIssueWorkspaceStore((state) => state.selectedIssueIds);
   const groupBy = useIssueWorkspaceStore(
-    (state) => state.groupByByProject[selectedProject.id] ?? "status",
+    (state) => state.groupByByProject[selectedProject.id] ?? DEFAULT_ISSUE_GROUP_BY,
   );
   const toggleIssueSelection = useIssueWorkspaceStore((state) => state.toggleIssueSelection);
   const setIssueSelection = useIssueWorkspaceStore((state) => state.setIssueSelection);
@@ -275,7 +292,6 @@ export function IssuesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [sort, setSort] = useState<"updated" | "priority">("updated");
-  const projectIssues = snapshot.issues.filter(({ projectId }) => projectId === selectedProject.id);
   const filteredIssues = filterIssues(snapshot.issues, selectedProject.id, filters);
   const visibleIssues = useMemo(
     () =>
@@ -304,12 +320,12 @@ export function IssuesPage() {
   return (
     <>
       <BasePageShell
-        density="workspace"
+        density="canvas"
         description="Plan work, attach reusable workflows, and keep execution history inside this project."
         showIntro={false}
         title="Issues"
       >
-        <div className="overflow-hidden rounded-lg border border-border/70 bg-background shadow-xs">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-b border-border/70 bg-background">
           <ProjectIssueViewBar
             layout="list"
             onRunView={(issueIds) => {
@@ -320,20 +336,42 @@ export function IssuesPage() {
             visibleIssueIds={visibleIssueIds}
           />
           <div className="flex h-9 items-center justify-end gap-1 border-b border-border/60 px-2">
-            <Checkbox
-              aria-label="Select all visible issues"
-              checked={allVisibleSelected}
-              className="mr-1"
-              onCheckedChange={(checked) => setIssueSelection(visibleIssueIds, checked === true)}
-            />
-            <Button
-              onClick={() => setSort((current) => (current === "updated" ? "priority" : "updated"))}
-              size="xs"
-              variant="ghost"
-            >
-              <ArrowUpDownIcon />
-              Sort: {sort === "updated" ? "Updated" : "Priority"}
-            </Button>
+            {selectedIssueIds.length > 0 ? (
+              <>
+                <span className="mr-auto pl-1.5 text-xs font-medium">
+                  {selectedIssueIds.length} selected
+                </span>
+                <Button onClick={() => setQueueOpen(true)} size="xs" variant="secondary">
+                  <PlayIcon />
+                  Queue
+                </Button>
+                <Button onClick={clearIssueSelection} size="xs" variant="ghost">
+                  <XIcon />
+                  Clear
+                </Button>
+              </>
+            ) : (
+              <>
+                <Checkbox
+                  aria-label="Select all visible issues"
+                  checked={allVisibleSelected}
+                  className="mr-1"
+                  onCheckedChange={(checked) =>
+                    setIssueSelection(visibleIssueIds, checked === true)
+                  }
+                />
+                <Button
+                  onClick={() =>
+                    setSort((current) => (current === "updated" ? "priority" : "updated"))
+                  }
+                  size="xs"
+                  variant="ghost"
+                >
+                  <ArrowUpDownIcon />
+                  Sort: {sort === "updated" ? "Updated" : "Priority"}
+                </Button>
+              </>
+            )}
             <Button onClick={() => setCreateOpen(true)} size="xs">
               <PlusIcon />
               New issue
@@ -341,27 +379,16 @@ export function IssuesPage() {
             </Button>
           </div>
 
-          {selectedIssueIds.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 border-b border-primary/20 bg-primary/5 px-3.5 py-2">
-              <span className="text-xs font-medium">{selectedIssueIds.length} selected</span>
-              <Button onClick={() => setQueueOpen(true)} size="xs" variant="secondary">
-                <PlayIcon />
-                Queue
-              </Button>
-              <Button className="ml-auto" onClick={clearIssueSelection} size="xs" variant="ghost">
-                <XIcon />
-                Clear
-              </Button>
-            </div>
-          ) : null}
-
-          <div role="list">
+          <div className="min-h-0 flex-1 overflow-y-auto" role="list">
             {visibleGroups.map((group) => (
               <Fragment key={group.key}>
-                {groupBy !== "none" ? (
-                  <IssueGroupHeader
+                {groupBy === "status" ? (
+                  isIssueStatus(group.key) ? (
+                    <StatusGroupHeader count={group.issues.length} status={group.key} />
+                  ) : null
+                ) : groupBy !== "none" ? (
+                  <PropertyGroupHeader
                     count={group.issues.length}
-                    groupBy={groupBy}
                     label={
                       groupBy === "workflow"
                         ? (workflowsById.get(group.key)?.name ?? group.key)
@@ -386,13 +413,6 @@ export function IssuesPage() {
                 No issues match the current project filters.
               </div>
             ) : null}
-          </div>
-
-          <div className="flex items-center justify-between border-t border-border/60 px-3.5 py-2 text-[10px] text-muted-foreground">
-            <span>
-              Showing {visibleIssues.length} of {projectIssues.length} project issues
-            </span>
-            <span>Click an issue to open details · C creates an issue</span>
           </div>
         </div>
       </BasePageShell>

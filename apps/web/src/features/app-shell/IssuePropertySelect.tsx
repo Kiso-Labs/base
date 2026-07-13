@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { cn } from "~/lib/utils";
 
 export interface IssuePropertyOption {
   readonly label: string;
@@ -13,22 +14,28 @@ export interface IssuePropertyOption {
 
 export function IssuePropertySelect({
   disabled,
+  icon,
   label,
   onValueChange,
   options,
   size = "default",
   value,
+  variant = "field",
 }: {
   readonly disabled?: boolean;
+  readonly icon?: React.ReactNode;
   readonly label: string;
   readonly onValueChange: (value: string) => void;
   readonly options: readonly IssuePropertyOption[];
   readonly size?: "default" | "sm" | "xs";
   readonly value: string;
+  readonly variant?: "field" | "pill";
 }) {
   return (
-    <label className="space-y-1.5">
-      <span className="text-xs font-medium text-foreground">{label}</span>
+    <label className={cn(variant === "field" && "space-y-1.5")}>
+      <span className={cn("text-xs font-medium text-foreground", variant === "pill" && "sr-only")}>
+        {label}
+      </span>
       <Select
         disabled={disabled}
         items={options}
@@ -37,7 +44,16 @@ export function IssuePropertySelect({
         }}
         value={value}
       >
-        <SelectTrigger className="w-full" size={size}>
+        <SelectTrigger
+          aria-label={label}
+          className={cn(
+            variant === "field" && "w-full",
+            variant === "pill" &&
+              "w-auto min-w-0 rounded-full border-border/60 bg-muted/45 px-3 text-muted-foreground shadow-none hover:bg-muted/70 hover:text-foreground",
+          )}
+          size={size}
+        >
+          {icon}
           <SelectValue />
         </SelectTrigger>
         <SelectPopup>
