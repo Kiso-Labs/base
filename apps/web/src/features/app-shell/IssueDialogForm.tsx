@@ -1,3 +1,4 @@
+import { CircleDashedIcon, EllipsisIcon, SignalIcon, TagIcon, UserRoundIcon } from "lucide-react";
 import type { FormEventHandler, ReactNode } from "react";
 
 import { Button } from "~/components/ui/button";
@@ -5,6 +6,7 @@ import { DialogFooter, DialogPanel } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 
 import { IssueMarkdownEditor } from "./IssueMarkdownEditor";
+import { IssuePropertySelect, type IssuePropertyOption } from "./IssuePropertySelect";
 
 export function IssueDialogForm({
   autoFocusTitle = false,
@@ -98,6 +100,78 @@ export function IssuePropertyButton({
       {icon}
       <span className="truncate">{children}</span>
     </Button>
+  );
+}
+
+export function IssueCorePropertyBar({
+  assignee,
+  expanded,
+  labels,
+  moreAccessibleLabel,
+  onExpand,
+  onPriorityChange,
+  onStatusChange,
+  onToggleMore,
+  priority,
+  priorityOptions,
+  status,
+  statusOptions,
+}: {
+  readonly assignee: string;
+  readonly expanded: boolean;
+  readonly labels: string;
+  readonly moreAccessibleLabel: string;
+  readonly onExpand: () => void;
+  readonly onPriorityChange: (value: string) => void;
+  readonly onStatusChange: (value: string) => void;
+  readonly onToggleMore: () => void;
+  readonly priority: string;
+  readonly priorityOptions: readonly IssuePropertyOption[];
+  readonly status: string;
+  readonly statusOptions: readonly IssuePropertyOption[];
+}) {
+  return (
+    <IssuePropertyBar>
+      <IssuePropertySelect
+        icon={<CircleDashedIcon />}
+        label="Status"
+        onValueChange={onStatusChange}
+        options={statusOptions}
+        size="sm"
+        value={status}
+        variant="pill"
+      />
+      <IssuePropertySelect
+        icon={<SignalIcon />}
+        label="Priority"
+        onValueChange={onPriorityChange}
+        options={priorityOptions}
+        size="sm"
+        value={priority}
+        variant="pill"
+      />
+      <IssuePropertyButton
+        accessibleLabel="Edit assignee"
+        icon={<UserRoundIcon />}
+        onClick={onExpand}
+      >
+        {assignee.trim() && assignee !== "Unassigned" ? assignee : "Assignee"}
+      </IssuePropertyButton>
+      <IssuePropertyButton accessibleLabel="Edit labels" icon={<TagIcon />} onClick={onExpand}>
+        {labels.trim() || "Labels"}
+      </IssuePropertyButton>
+      <Button
+        aria-expanded={expanded}
+        aria-label={moreAccessibleLabel}
+        className="rounded-full"
+        onClick={onToggleMore}
+        size="icon-sm"
+        type="button"
+        variant="outline"
+      >
+        <EllipsisIcon />
+      </Button>
+    </IssuePropertyBar>
   );
 }
 

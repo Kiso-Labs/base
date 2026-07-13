@@ -1,12 +1,4 @@
-import {
-  CircleDashedIcon,
-  EllipsisIcon,
-  LayoutTemplateIcon,
-  PlusIcon,
-  SignalIcon,
-  TagIcon,
-  UserRoundIcon,
-} from "lucide-react";
+import { LayoutTemplateIcon, PlusIcon } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { Button } from "~/components/ui/button";
@@ -16,12 +8,7 @@ import { toastManager } from "~/components/ui/toast";
 
 import { useBaseWorkspace } from "./BaseWorkspaceContext";
 import { BASE_ISSUE_TEMPLATES, applyIssueTemplate, type IssueDraft } from "./issueRepository";
-import {
-  IssueDialogActions,
-  IssueDialogForm,
-  IssuePropertyBar,
-  IssuePropertyButton,
-} from "./IssueDialogForm";
+import { IssueDialogActions, IssueCorePropertyBar, IssueDialogForm } from "./IssueDialogForm";
 import { IssueDialogHeader } from "./IssueDialogHeader";
 import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
 import { IssuePropertySelect } from "./IssuePropertySelect";
@@ -165,55 +152,24 @@ export function IssueCreateDialog({
           titleError={titleError}
           titleId={`${formId}-title`}
         >
-          <IssuePropertyBar>
-            <IssuePropertySelect
-              icon={<CircleDashedIcon />}
-              label="Status"
-              onValueChange={(value) => setStatus(value as BaseIssueStatus)}
-              options={[
-                { label: "Backlog", value: "Backlog" },
-                { label: "Planned", value: "Planned" },
-                { label: "Ready", value: "Ready" },
-              ]}
-              size="sm"
-              value={status}
-              variant="pill"
-            />
-            <IssuePropertySelect
-              icon={<SignalIcon />}
-              label="Priority"
-              onValueChange={(value) => setPriority(value as BasePriority)}
-              options={BASE_PRIORITIES.map((value) => ({ label: value, value }))}
-              size="sm"
-              value={priority}
-              variant="pill"
-            />
-            <IssuePropertyButton
-              accessibleLabel="Edit assignee"
-              icon={<UserRoundIcon />}
-              onClick={() => setShowMoreFields(true)}
-            >
-              {assignee.trim() && assignee !== "Unassigned" ? assignee : "Assignee"}
-            </IssuePropertyButton>
-            <IssuePropertyButton
-              accessibleLabel="Edit labels"
-              icon={<TagIcon />}
-              onClick={() => setShowMoreFields(true)}
-            >
-              {labels.trim() || "Labels"}
-            </IssuePropertyButton>
-            <Button
-              aria-expanded={showMoreFields}
-              aria-label="More issue fields"
-              className="rounded-full"
-              onClick={() => setShowMoreFields((visible) => !visible)}
-              size="icon-sm"
-              type="button"
-              variant="outline"
-            >
-              <EllipsisIcon />
-            </Button>
-          </IssuePropertyBar>
+          <IssueCorePropertyBar
+            assignee={assignee}
+            expanded={showMoreFields}
+            labels={labels}
+            moreAccessibleLabel="More issue fields"
+            onExpand={() => setShowMoreFields(true)}
+            onPriorityChange={(value) => setPriority(value as BasePriority)}
+            onStatusChange={(value) => setStatus(value as BaseIssueStatus)}
+            onToggleMore={() => setShowMoreFields((visible) => !visible)}
+            priority={priority}
+            priorityOptions={BASE_PRIORITIES.map((value) => ({ label: value, value }))}
+            status={status}
+            statusOptions={[
+              { label: "Backlog", value: "Backlog" },
+              { label: "Planned", value: "Planned" },
+              { label: "Ready", value: "Ready" },
+            ]}
+          />
 
           {showMoreFields ? (
             <div className="mt-5 rounded-xl border border-border/60 bg-muted/15 p-4">
