@@ -14,6 +14,7 @@ import {
   filterIssues,
   groupIssues,
   hasActiveIssueFilters,
+  issueViewPath,
   queueIssues,
   queueIssueView,
   resolveIssueView,
@@ -22,6 +23,11 @@ import {
 } from "./issueRepository";
 
 describe("issue repository", () => {
+  it("routes saved views to their matching issue presentation", () => {
+    expect(issueViewPath("list")).toBe("/issues");
+    expect(issueViewPath("board")).toBe("/board");
+  });
+
   it("detects whether a project issue query has active filters", () => {
     expect(hasActiveIssueFilters(DEFAULT_ISSUE_FILTERS)).toBe(false);
     expect(hasActiveIssueFilters({ ...DEFAULT_ISSUE_FILTERS, search: "retry" })).toBe(true);
@@ -343,6 +349,7 @@ describe("issue repository", () => {
     const input = {
       projectId: "project-base-desktop",
       name: "Release blockers",
+      description: "Urgent issues blocking the release.",
       layout: "list" as const,
       groupBy: "priority" as const,
       filters: { ...DEFAULT_ISSUE_FILTERS, priority: "Urgent" as const },
@@ -354,6 +361,7 @@ describe("issue repository", () => {
       id: "view-project-base-desktop-release-blockers",
       kind: "saved",
       projectId: "project-base-desktop",
+      description: "Urgent issues blocking the release.",
     });
     expect(second.id).toBe("view-project-base-desktop-release-blockers-2");
   });

@@ -32,18 +32,8 @@ import { toastManager } from "~/components/ui/toast";
 import { useBaseWorkspace } from "./BaseWorkspaceContext";
 import { IssueFilterBar } from "./IssueFilterBar";
 import { IssueViewToggle } from "./IssueViewToggle";
-import { DEFAULT_ISSUE_FILTERS, type IssueViewGroupBy } from "./issueRepository";
+import { DEFAULT_ISSUE_FILTERS, ISSUE_VIEW_GROUP_OPTIONS, issueViewPath } from "./issueRepository";
 import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
-
-const GROUP_OPTIONS: readonly { readonly label: string; readonly value: IssueViewGroupBy }[] = [
-  { label: "No grouping", value: "none" },
-  { label: "Status", value: "status" },
-  { label: "Priority", value: "priority" },
-  { label: "Assignee", value: "assignee" },
-  { label: "Workflow", value: "workflow" },
-  { label: "Module", value: "module" },
-  { label: "Cycle", value: "cycle" },
-];
 
 export function ProjectIssueViewBar({
   layout,
@@ -82,7 +72,7 @@ export function ProjectIssueViewBar({
     if (viewId === "custom") return;
     const view = activateView(selectedProject.id, viewId);
     if (!view) return;
-    void navigate({ to: view.layout === "board" ? "/board" : "/issues" });
+    void navigate({ to: issueViewPath(view.layout) });
   };
 
   const createView = (event: FormEvent<HTMLFormElement>) => {
@@ -148,18 +138,19 @@ export function ProjectIssueViewBar({
             <IssueViewToggle />
             {layout === "list" ? (
               <Select
-                items={GROUP_OPTIONS}
+                items={ISSUE_VIEW_GROUP_OPTIONS}
                 onValueChange={(value) => value && setGroupBy(selectedProject.id, value)}
                 value={groupBy}
               >
                 <SelectTrigger aria-label="Group issues" className="w-36" size="sm" variant="ghost">
                   <Layers3Icon className="size-3" />
                   <SelectValue>
-                    {GROUP_OPTIONS.find(({ value }) => value === groupBy)?.label ?? "Group"}
+                    {ISSUE_VIEW_GROUP_OPTIONS.find(({ value }) => value === groupBy)?.label ??
+                      "Group"}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup>
-                  {GROUP_OPTIONS.map((option) => (
+                  {ISSUE_VIEW_GROUP_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>

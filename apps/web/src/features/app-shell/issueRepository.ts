@@ -30,6 +30,23 @@ export type IssueViewGroupBy =
   | "module"
   | "cycle";
 
+export const ISSUE_VIEW_GROUP_OPTIONS: readonly {
+  readonly label: string;
+  readonly value: IssueViewGroupBy;
+}[] = [
+  { label: "No grouping", value: "none" },
+  { label: "Status", value: "status" },
+  { label: "Priority", value: "priority" },
+  { label: "Assignee", value: "assignee" },
+  { label: "Workflow", value: "workflow" },
+  { label: "Module", value: "module" },
+  { label: "Cycle", value: "cycle" },
+];
+
+export function issueViewPath(layout: IssueViewLayout): "/board" | "/issues" {
+  return layout === "board" ? "/board" : "/issues";
+}
+
 export const DEFAULT_ISSUE_GROUP_BY = "status" as const satisfies IssueViewGroupBy;
 
 export interface BaseIssueView {
@@ -37,6 +54,7 @@ export interface BaseIssueView {
   readonly projectId: string;
   readonly kind: "system" | "saved";
   readonly name: string;
+  readonly description?: string;
   readonly layout: IssueViewLayout;
   readonly groupBy: IssueViewGroupBy;
   readonly filters: IssueFilters;

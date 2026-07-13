@@ -50,7 +50,7 @@ const PROJECTS_NAVIGATION_ITEM = navigationItem("agents", {
   icon: BoxIcon,
   label: "Projects",
 });
-const VIEWS_NAVIGATION_ITEM = navigationItem("board");
+const VIEWS_NAVIGATION_ITEM = navigationItem("views");
 
 const WORKSPACE_NAVIGATION_ITEMS = [PROJECTS_NAVIGATION_ITEM, VIEWS_NAVIGATION_ITEM] as const;
 
@@ -61,6 +61,7 @@ const TEAM_NAVIGATION_ITEMS = [
 ] as const;
 
 const WORKSPACE_MORE_NAVIGATION_ITEMS = [
+  navigationItem("board"),
   navigationItem("workflows"),
   navigationItem("runs"),
   navigationItem("repository"),

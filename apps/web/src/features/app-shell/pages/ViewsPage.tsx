@@ -1,13 +1,16 @@
+import { useUser } from "@clerk/react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   CalendarDaysIcon,
   ChevronDownIcon,
   CircleIcon,
-  ExternalLinkIcon,
+  FilterIcon,
   Layers3Icon,
+  LinkIcon,
   MegaphoneIcon,
   MoreHorizontalIcon,
   PlusIcon,
+  Settings2Icon,
   SlidersHorizontalIcon,
   StarIcon,
   UsersIcon,
@@ -15,6 +18,7 @@ import {
 import { useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "~/components/ui/button";
+import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { Input } from "~/components/ui/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { toastManager } from "~/components/ui/toast";
@@ -25,8 +29,11 @@ import { useBaseWorkspace } from "../BaseWorkspaceContext";
 import { IssueFilterBar } from "../IssueFilterBar";
 import {
   DEFAULT_ISSUE_FILTERS,
+  ISSUE_VIEW_GROUP_OPTIONS,
   filterIssues,
+  groupIssues,
   hasActiveIssueFilters,
+  issueViewPath,
   type BaseIssueView,
   type IssueViewGroupBy,
   type IssueViewLayout,
@@ -36,16 +43,6 @@ import type { BaseIssueStatus, BaseIssueSummary } from "../workspaceRepository";
 
 type ViewCollection = "issues" | "projects";
 type ViewsMode = "create" | "list";
-
-const GROUP_OPTIONS: readonly { readonly label: string; readonly value: IssueViewGroupBy }[] = [
-  { label: "No grouping", value: "none" },
-  { label: "Status", value: "status" },
-  { label: "Priority", value: "priority" },
-  { label: "Assignee", value: "assignee" },
-  { label: "Workflow", value: "workflow" },
-  { label: "Module", value: "module" },
-  { label: "Cycle", value: "cycle" },
-];
 
 const STATUS_CLASS_NAME: Readonly<Record<BaseIssueStatus, string>> = {
   Backlog: "text-muted-foreground/60",
@@ -88,22 +85,54 @@ function CollectionTabs({
   );
 }
 
-function ViewListRow({
-  onOpen,
-  ownerName,
-  view,
+function OwnerPresentation({
+  imageUrl,
+  name,
 }: {
-  readonly onOpen: () => void;
-  readonly ownerName: string;
-  readonly view: BaseIssueView;
+  readonly imageUrl?: string;
+  readonly name: string;
 }) {
-  const initials = ownerName
+  const initials = name
     .split(/\s+/)
     .map((part) => part[0])
     .join("")
     .slice(0, 2)
     .toLocaleUpperCase();
 
+  return (
+    <span className="flex min-w-0 items-center gap-2 text-sm text-foreground/80">
+      {imageUrl ? (
+        <img alt="" className="size-5 shrink-0 rounded-full object-cover" src={imageUrl} />
+      ) : (
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/60 bg-muted text-[8px] font-semibold text-muted-foreground">
+          {initials}
+        </span>
+      )}
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
+function ConfiguredViewOwner() {
+  const { isLoaded, user } = useUser();
+  if (!isLoaded || !user) return <OwnerPresentation name="You" />;
+
+  return (
+    <OwnerPresentation imageUrl={user.imageUrl} name={user.fullName ?? user.firstName ?? "You"} />
+  );
+}
+
+function ViewOwner() {
+  return hasCloudPublicConfig() ? <ConfiguredViewOwner /> : <OwnerPresentation name="You" />;
+}
+
+function ViewListRow({
+  onOpen,
+  view,
+}: {
+  readonly onOpen: () => void;
+  readonly view: BaseIssueView;
+}) {
   return (
     <button
       className="group grid min-h-16 w-full grid-cols-[minmax(0,1fr)_minmax(11rem,15%)] items-center rounded-lg bg-muted/30 px-4 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -115,36 +144,39 @@ function ViewListRow({
           <Layers3Icon className="size-4 fill-muted-foreground/15" />
         </span>
         <span className="truncate text-sm font-medium text-foreground/90">{view.name}</span>
-        {view.kind === "saved" ? (
-          <span className="rounded-full border border-border/55 px-1.5 py-0.5 text-[9px] text-muted-foreground">
-            Saved
-          </span>
-        ) : null}
       </span>
-      <span className="flex min-w-0 items-center gap-2 text-sm text-foreground/80">
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/60 bg-muted text-[8px] font-semibold text-muted-foreground">
-          {initials}
-        </span>
-        <span className="truncate">{ownerName}</span>
-      </span>
+      <ViewOwner />
     </button>
   );
 }
 
 function ViewsList({ onCreate }: { readonly onCreate: () => void }) {
   const navigate = useNavigate();
-  const { selectedProject, snapshot } = useBaseWorkspace();
+  const { selectedProject } = useBaseWorkspace();
   const views = useIssueWorkspaceStore((state) => state.views);
   const activateView = useIssueWorkspaceStore((state) => state.activateView);
   const [collection, setCollection] = useState<ViewCollection>("issues");
+  const [favorite, setFavorite] = useState(false);
   const [showOnlySaved, setShowOnlySaved] = useState(false);
-  const projectViews = views.filter(
-    (view) => view.projectId === selectedProject.id && (!showOnlySaved || view.kind === "saved"),
+  const savedViewNames = new Set(
+    views
+      .filter((view) => view.projectId === selectedProject.id && view.kind === "saved")
+      .map((view) => view.name.trim().toLocaleLowerCase()),
   );
+  const projectViews = views.filter((view) => {
+    if (view.projectId !== selectedProject.id) return false;
+    if (showOnlySaved) return view.kind === "saved";
+    if (view.kind === "saved") return true;
+    return (
+      view.id === `view-${selectedProject.id}-all` &&
+      !savedViewNames.has(view.name.trim().toLocaleLowerCase())
+    );
+  });
 
   const openView = (view: BaseIssueView) => {
-    activateView(selectedProject.id, view.id);
-    void navigate({ to: view.layout === "board" ? "/board" : "/issues" });
+    const activatedView = activateView(selectedProject.id, view.id);
+    if (!activatedView) return;
+    void navigate({ to: issueViewPath(activatedView.layout) });
   };
 
   return (
@@ -158,8 +190,14 @@ function ViewsList({ onCreate }: { readonly onCreate: () => void }) {
       }
       headerIcon={<MegaphoneIcon className="size-3.5 text-info" />}
       headerTitleAccessory={
-        <Button aria-label="Favorite views" size="icon-xs" variant="ghost">
-          <StarIcon className="size-3.5" />
+        <Button
+          aria-label={favorite ? "Remove views from favorites" : "Favorite views"}
+          aria-pressed={favorite}
+          onClick={() => setFavorite((current) => !current)}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <StarIcon className={cn("size-3.5", favorite && "fill-current text-warning")} />
         </Button>
       }
       minimalHeader
@@ -192,8 +230,7 @@ function ViewsList({ onCreate }: { readonly onCreate: () => void }) {
                 <ViewListRow
                   key={view.id}
                   onOpen={() => openView(view)}
-                  ownerName={snapshot.workspace.name}
-                  view={view}
+                  view={view.name === "All issues" ? { ...view, name: "all" } : view}
                 />
               ))}
             </div>
@@ -269,7 +306,7 @@ function ViewDisplaySettings({
       <PopoverTrigger
         render={<Button aria-label="View display settings" size="icon-sm" variant="ghost" />}
       >
-        <SlidersHorizontalIcon className="size-3.5" />
+        <Settings2Icon className="size-3.5" />
       </PopoverTrigger>
       <PopoverPopup align="end" className="w-56" sideOffset={6}>
         <div className="space-y-4">
@@ -299,7 +336,7 @@ function ViewDisplaySettings({
               onChange={(event) => onGroupByChange(event.currentTarget.value as IssueViewGroupBy)}
               value={groupBy}
             >
-              {GROUP_OPTIONS.map((option) => (
+              {ISSUE_VIEW_GROUP_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -323,15 +360,16 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
   const [collection, setCollection] = useState<ViewCollection>("issues");
   const [description, setDescription] = useState("");
   const [filtersVisible, setFiltersVisible] = useState(false);
-  const [groupBy, setGroupBy] = useState<IssueViewGroupBy>("status");
+  const [groupBy, setGroupBy] = useState<IssueViewGroupBy>("none");
   const [layout, setLayout] = useState<IssueViewLayout>("list");
   const [name, setName] = useState("All issues");
   const visibleIssues = useMemo(
-    () =>
-      filterIssues(snapshot.issues, selectedProject.id, filters).filter(
-        (issue) => issue.status !== "Done",
-      ),
+    () => filterIssues(snapshot.issues, selectedProject.id, filters),
     [filters, selectedProject.id, snapshot.issues],
+  );
+  const previewGroups = useMemo(
+    () => groupIssues(visibleIssues, layout === "board" ? "status" : groupBy),
+    [groupBy, layout, visibleIssues],
   );
   const activeFilters = hasActiveIssueFilters(filters);
 
@@ -340,6 +378,7 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
     const saved = saveView({
       projectId: selectedProject.id,
       name,
+      description: description.trim(),
       layout,
       groupBy: layout === "board" ? "status" : groupBy,
       filters,
@@ -348,13 +387,13 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
     toastManager.add({
       type: "success",
       title: "Your view was successfully created.",
-      description: description.trim() || undefined,
       data: {
         secondaryActionProps: {
           children: "Open view",
           onClick: () => {
-            activateView(selectedProject.id, saved.id);
-            void navigate({ to: saved.layout === "board" ? "/board" : "/issues" });
+            const activatedView = activateView(selectedProject.id, saved.id);
+            if (!activatedView) return;
+            void navigate({ to: issueViewPath(activatedView.layout) });
           },
         },
         secondaryActionVariant: "ghost",
@@ -369,7 +408,7 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
         description="Choose the issue setup this view should preserve."
         headerActions={
           <Button aria-label="Copy view link" size="icon-xs" variant="ghost">
-            <ExternalLinkIcon className="size-3.5" />
+            <LinkIcon className="size-3.5" />
           </Button>
         }
         headerIcon={<MegaphoneIcon className="size-3.5 text-info" />}
@@ -434,7 +473,7 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
                   variant={filtersVisible || activeFilters ? "secondary" : "ghost"}
                 >
                   <span className="relative">
-                    <SlidersHorizontalIcon className="size-3.5" />
+                    <FilterIcon className="size-3.5" />
                     {activeFilters ? (
                       <span className="absolute -right-1 -top-1 size-1.5 rounded-full bg-primary" />
                     ) : null}
@@ -457,20 +496,26 @@ function ViewCreation({ onCancel }: { readonly onCancel: () => void }) {
 
           {collection === "issues" ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="flex h-11 items-center gap-2 bg-muted/25 px-4">
-                <ChevronDownIcon className="size-3.5 text-muted-foreground/60" />
-                <CircleIcon className="size-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Todo</span>
-                <span className="font-mono text-xs text-muted-foreground">
-                  {visibleIssues.length}
-                </span>
-                <PlusIcon className="ml-auto size-3.5 text-muted-foreground" />
-              </div>
-              <div role="list" aria-label="View issue preview">
-                {visibleIssues.map((issue) => (
-                  <PreviewIssueRow issue={issue} key={issue.id} />
-                ))}
-              </div>
+              {previewGroups.map((group) => (
+                <div key={group.key}>
+                  <div className="flex h-11 items-center gap-2 bg-muted/25 px-4">
+                    <ChevronDownIcon className="size-3.5 text-muted-foreground/60" />
+                    <CircleIcon className="size-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">
+                      {group.key === "All issues" ? "Todo" : group.key}
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {group.issues.length}
+                    </span>
+                    <PlusIcon className="ml-auto size-3.5 text-muted-foreground" />
+                  </div>
+                  <div role="list" aria-label={`${group.key} issue preview`}>
+                    {group.issues.map((issue) => (
+                      <PreviewIssueRow issue={issue} key={issue.id} />
+                    ))}
+                  </div>
+                </div>
+              ))}
               {visibleIssues.length === 0 ? (
                 <div className="flex min-h-36 items-center justify-center px-6 text-center text-xs text-muted-foreground">
                   No issues match the current filters.

@@ -8,6 +8,7 @@ describe("Base primary navigation", () => {
       ["inbox", "/inbox"],
       ["issues", "/issues"],
       ["board", "/board"],
+      ["views", "/views"],
       ["workflows", "/workflows"],
       ["runs", "/runs"],
       ["agents", "/agents"],
@@ -18,6 +19,8 @@ describe("Base primary navigation", () => {
 
   it("keeps nested product routes attached to their primary destination", () => {
     expect(resolveBaseNavigationItem("/issues/BAS-101")?.id).toBe("issues");
+    expect(resolveBaseNavigationItem("/board")?.id).toBe("board");
+    expect(resolveBaseNavigationItem("/views")?.id).toBe("views");
     expect(resolveBaseNavigationItem("/workflows/reliable-feature-delivery")?.id).toBe("workflows");
     expect(resolveBaseNavigationItem("/settings/providers")?.id).toBe("settings");
   });
