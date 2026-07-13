@@ -48,14 +48,14 @@ const GROUP_OPTIONS: readonly { readonly label: string; readonly value: IssueVie
 ];
 
 const STATUS_CLASS_NAME: Readonly<Record<BaseIssueStatus, string>> = {
-  Backlog: "border-muted-foreground/60",
-  Planned: "border-primary/55",
-  Ready: "border-success/75",
-  Queued: "border-warning/80",
-  Running: "border-info/80",
-  Blocked: "border-destructive/80",
-  Review: "border-primary/80",
-  Done: "border-success/80 bg-success/15",
+  Backlog: "text-muted-foreground/60",
+  Planned: "text-primary/55",
+  Ready: "text-success/75",
+  Queued: "text-warning/80",
+  Running: "text-info/80",
+  Blocked: "text-destructive/80",
+  Review: "text-primary/80",
+  Done: "fill-success/15 text-success/80",
 };
 
 function CollectionTabs({
