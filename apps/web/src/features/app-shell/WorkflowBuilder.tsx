@@ -58,6 +58,7 @@ import { cn } from "~/lib/utils";
 import { BasePageShell } from "./BasePageShell";
 import { useBaseWorkspace } from "./BaseWorkspaceContext";
 import { WorkflowInspector } from "./WorkflowInspector";
+import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
 import { workflowEdgeTypes, type WorkflowCanvasEdgeElement } from "./WorkflowCanvasEdge";
 import {
   workflowNodeTypes,
@@ -79,6 +80,7 @@ import {
 import {
   deriveWorkflowSummaries,
   useWorkflowWorkspaceStore,
+  workflowTriggerBindingKey,
   type WorkflowTestState,
 } from "./workflowWorkspaceStore";
 
@@ -514,6 +516,15 @@ function WorkflowCanvas({
   readonly railCollapsed: boolean;
   readonly selectedTemplate: WorkflowTemplate;
 }) {
+  const { selectedProject } = useBaseWorkspace();
+  const issueViews = useIssueWorkspaceStore((state) => state.views);
+  const kanbanViews = useMemo(
+    () =>
+      issueViews
+        .filter((view) => view.projectId === selectedProject.id && view.layout === "board")
+        .map(({ id, name }) => ({ id, name })),
+    [issueViews, selectedProject.id],
+  );
   const validation = useWorkflowWorkspaceStore(
     (state) =>
       state.validationByTemplateId[selectedTemplate.id] ?? { diagnostics: [], canPublish: false },
@@ -529,6 +540,7 @@ function WorkflowCanvas({
   const fullTestState = useWorkflowWorkspaceStore(
     (state) => state.fullTestStateByTemplateId[selectedTemplate.id],
   );
+  const triggerBindings = useWorkflowWorkspaceStore((state) => state.triggerBindings);
   const executeCommand = useWorkflowWorkspaceStore((state) => state.executeCommand);
   const updateMetadata = useWorkflowWorkspaceStore((state) => state.updateMetadata);
   const selectNode = useWorkflowWorkspaceStore((state) => state.selectNode);
@@ -536,6 +548,7 @@ function WorkflowCanvas({
   const publish = useWorkflowWorkspaceStore((state) => state.publish);
   const testNode = useWorkflowWorkspaceStore((state) => state.testNode);
   const testWorkflow = useWorkflowWorkspaceStore((state) => state.testWorkflow);
+  const setTriggerBinding = useWorkflowWorkspaceStore((state) => state.setTriggerBinding);
   const undo = useWorkflowWorkspaceStore((state) => state.undo);
   const redo = useWorkflowWorkspaceStore((state) => state.redo);
   const [tool, setTool] = useState<"select" | "pan">("select");
@@ -552,6 +565,28 @@ function WorkflowCanvas({
         ]),
       ),
     [testStateByNodeId],
+  );
+  const triggerBindingLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        selectedTemplate.draft.content.graph.nodes
+          .filter(
+            (node) =>
+              node.kind === "trigger" &&
+              (node.config.event === "issue-status" || node.config.event === "issue-queued"),
+          )
+          .map((node) => {
+            const binding =
+              triggerBindings[
+                workflowTriggerBindingKey(selectedProject.id, selectedTemplate.id, node.id)
+              ];
+            return [
+              node.id,
+              kanbanViews.find(({ id }) => id === binding?.viewId)?.name ?? "All project issues",
+            ];
+          }),
+      ),
+    [kanbanViews, selectedProject.id, selectedTemplate, triggerBindings],
   );
 
   const inspectNode = useCallback(
@@ -583,6 +618,7 @@ function WorkflowCanvas({
         draft: selectedTemplate.draft,
         validation,
         testStates: canvasTestStates,
+        bindingLabels: triggerBindingLabels,
         onAddAfter: requestAddAfter,
         onInspectNode: inspectNode,
         onTestNode: runNodeTest,
@@ -593,6 +629,7 @@ function WorkflowCanvas({
       requestAddAfter,
       runNodeTest,
       selectedTemplate.draft,
+      triggerBindingLabels,
       validation,
     ],
   );
@@ -752,6 +789,12 @@ function WorkflowCanvas({
 
   const selectedNode =
     selectedTemplate.draft.content.graph.nodes.find(({ id }) => id === selectedNodeId) ?? null;
+  const selectedTriggerBinding =
+    selectedNode?.kind === "trigger"
+      ? triggerBindings[
+          workflowTriggerBindingKey(selectedProject.id, selectedTemplate.id, selectedNode.id)
+        ]
+      : undefined;
   const blockingErrors = validation.diagnostics.filter(({ severity }) => severity === "error");
   const showValidation = validationOpen;
 
@@ -981,6 +1024,7 @@ function WorkflowCanvas({
         {inspectorOpen ? (
           <WorkflowInspector
             diagnostics={validation.diagnostics}
+            kanbanViews={kanbanViews}
             node={selectedNode}
             onClose={() => onInspectorOpenChange(false)}
             onUpdateNode={(node) => {
@@ -991,6 +1035,22 @@ function WorkflowCanvas({
                 description: result.ok ? "Validation refreshed for this draft." : result.reason,
               });
             }}
+            onUpdateTriggerView={(viewId) => {
+              if (selectedNode?.kind !== "trigger") return;
+              const result = setTriggerBinding({
+                projectId: selectedProject.id,
+                templateId: selectedTemplate.id,
+                nodeId: selectedNode.id,
+                viewId,
+              });
+              toastManager.add({
+                type: result.ok ? "success" : "error",
+                title: result.ok ? "Board trigger updated" : "Binding blocked",
+                description: result.ok
+                  ? `${selectedProject.name} will evaluate this trigger against ${kanbanViews.find(({ id }) => id === viewId)?.name ?? "all project issues"}.`
+                  : result.reason,
+              });
+            }}
             onUpdateWorkflow={(metadata) => {
               const result = updateMetadata(selectedTemplate.id, metadata);
               toastManager.add({
@@ -999,6 +1059,8 @@ function WorkflowCanvas({
                 description: result.ok ? "Template metadata saved." : result.reason,
               });
             }}
+            projectName={selectedProject.name}
+            triggerViewId={selectedTriggerBinding?.viewId ?? null}
             workflowDescription={selectedTemplate.draft.content.description}
             workflowName={selectedTemplate.draft.content.name}
           />

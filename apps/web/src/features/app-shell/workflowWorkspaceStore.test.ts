@@ -265,6 +265,30 @@ describe("workflow workspace store", () => {
     });
   });
 
+  it("persists project-scoped trigger bindings to Kanban views without changing the template", () => {
+    const store = createWorkflowWorkspaceStore();
+    const template = store.getState().templates[0]!;
+    const trigger = template.draft.content.graph.nodes.find(({ kind }) => kind === "trigger")!;
+
+    expect(
+      store.getState().setTriggerBinding({
+        projectId: "project-base-desktop",
+        templateId: template.id,
+        nodeId: trigger.id,
+        viewId: "view-project-base-desktop-active",
+      }),
+    ).toEqual({ ok: true, changed: true });
+    expect(
+      store.getState().triggerBindings[`project-base-desktop:${template.id}:${trigger.id}`],
+    ).toEqual({
+      projectId: "project-base-desktop",
+      templateId: template.id,
+      nodeId: trigger.id,
+      viewId: "view-project-base-desktop-active",
+    });
+    expect(store.getState().templates[0]).toBe(template);
+  });
+
   it("persists workspace templates and view state while rebuilding session-only state", async () => {
     const storage = createMemoryStorage();
     const storageKey = "workflow-workspace-test";
@@ -282,6 +306,12 @@ describe("workflow workspace store", () => {
     firstStore.getState().selectTemplate(secondTemplate.id);
     firstStore.getState().selectNode(secondNode.id);
     firstStore.getState().testNode(secondNode.id);
+    firstStore.getState().setTriggerBinding({
+      projectId: "project-base-desktop",
+      templateId: firstTemplate.id,
+      nodeId: firstNode.id,
+      viewId: "view-project-base-desktop-active",
+    });
 
     const persisted = JSON.parse((await storage.getItem(storageKey)) ?? "{}") as {
       readonly state?: Readonly<Record<string, unknown>>;
@@ -289,6 +319,7 @@ describe("workflow workspace store", () => {
     expect(Object.keys(persisted.state ?? {}).sort()).toEqual([
       "selectedTemplateId",
       "templates",
+      "triggerBindings",
       "viewportByTemplateId",
     ]);
 
@@ -305,6 +336,9 @@ describe("workflow workspace store", () => {
         ?.position,
     ).toEqual({ x: 240, y: 128 });
     expect(hydrated.selectedNodeId).toBeNull();
+    expect(
+      hydrated.triggerBindings[`project-base-desktop:${firstTemplate.id}:${firstNode.id}`]?.viewId,
+    ).toBe("view-project-base-desktop-active");
     expect(hydrated.historyByTemplateId[firstTemplate.id]?.past).toEqual([]);
     expect(hydrated.testStateByNodeId[secondNode.id]).toMatchObject({ status: "idle" });
     expect(hydrated.validationByTemplateId[firstTemplate.id]?.canPublish).toBe(true);

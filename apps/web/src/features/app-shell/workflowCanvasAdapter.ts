@@ -25,6 +25,7 @@ export interface CreateWorkflowCanvasElementsInput {
   readonly draft: WorkflowDraft;
   readonly validation: WorkflowValidationReport;
   readonly testStates?: Readonly<Record<string, WorkflowNodeTestState>>;
+  readonly bindingLabels?: Readonly<Record<string, string>>;
   readonly onAddAfter?: (nodeId: string) => void;
   readonly onInspectNode?: (nodeId: string) => void;
   readonly onTestNode?: (nodeId: string) => void;
@@ -42,6 +43,7 @@ export type WorkflowConnectionResult =
 
 export function createWorkflowCanvasElements({
   draft,
+  bindingLabels = {},
   onAddAfter,
   onInspectEdge,
   onInspectNode,
@@ -81,6 +83,7 @@ export function createWorkflowCanvasElements({
         node,
         ...(findings?.length ? { findings } : {}),
         ...(testState ? { testState } : {}),
+        ...(bindingLabels[node.id] ? { bindingLabel: bindingLabels[node.id] } : {}),
         ...(onAddAfter ? { onAddAfter } : {}),
         ...(onInspectNode ? { onInspect: onInspectNode } : {}),
         ...(onTestNode ? { onTest: onTestNode } : {}),

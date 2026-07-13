@@ -10,7 +10,7 @@ issues: []
 
 ## Scope
 
-Build Phase 3 as a workspace-global workflow template editor with a typed, library-independent graph; React Flow canvas; validation and publication; persisted drafts and viewports; node inspector; test states; and bounded undo/redo. Project run execution remains owned by the issue repository.
+Build Phase 3 as a workspace-global workflow template editor with a typed, library-independent graph; React Flow canvas; validation and publication; persisted drafts, viewports, and project Kanban trigger bindings; a deep node inspector; test states; and bounded undo/redo. Project run execution remains owned by the issue repository.
 
 ## Implements
 

@@ -1,4 +1,19 @@
-import { AlertTriangleIcon, PlusIcon, SaveIcon, Trash2Icon, XIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  BotIcon,
+  BoxesIcon,
+  CheckCircle2Icon,
+  FlaskConicalIcon,
+  GitBranchIcon,
+  Layers3Icon,
+  PlusIcon,
+  SaveIcon,
+  ShieldCheckIcon,
+  Trash2Icon,
+  WebhookIcon,
+  XIcon,
+  ZapIcon,
+} from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { Badge } from "~/components/ui/badge";
@@ -6,6 +21,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
+import { cn } from "~/lib/utils";
 
 import type {
   WorkflowDiagnostic,
@@ -17,6 +33,19 @@ import type {
 const SELECT_CLASS_NAME =
   "h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
+const NODE_KIND_META = {
+  trigger: { icon: ZapIcon, label: "Trigger", className: "bg-amber-500/10 text-amber-600" },
+  agent: { icon: BotIcon, label: "Agent step", className: "bg-violet-500/10 text-violet-600" },
+  test: { icon: FlaskConicalIcon, label: "Test", className: "bg-emerald-500/10 text-emerald-600" },
+  hook: { icon: WebhookIcon, label: "Hook", className: "bg-cyan-500/10 text-cyan-600" },
+  approval: {
+    icon: ShieldCheckIcon,
+    label: "Approval",
+    className: "bg-orange-500/10 text-orange-600",
+  },
+  branch: { icon: GitBranchIcon, label: "Branch", className: "bg-blue-500/10 text-blue-600" },
+} as const;
+
 function Field({ children, label }: { readonly children: ReactNode; readonly label: string }) {
   return (
     <div className="space-y-1.5">
@@ -25,6 +54,30 @@ function Field({ children, label }: { readonly children: ReactNode; readonly lab
       </Label>
       {children}
     </div>
+  );
+}
+
+function InspectorSection({
+  children,
+  description,
+  title,
+}: {
+  readonly children: ReactNode;
+  readonly description?: string;
+  readonly title: string;
+}) {
+  return (
+    <section className="space-y-3 rounded-xl border border-border/60 bg-card/45 p-3.5 shadow-xs">
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.09em] text-foreground/80">
+          {title}
+        </p>
+        {description ? (
+          <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -292,6 +345,45 @@ function NodeConfiguration({
             value={node.config.workingDirectory}
           />
         </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Timeout (sec)">
+            <Input
+              min={1}
+              onChange={(event) =>
+                onChange({
+                  ...node,
+                  config: {
+                    ...node.config,
+                    timeoutSeconds: numberFromInput(
+                      event.currentTarget.value,
+                      node.config.timeoutSeconds,
+                    ),
+                  },
+                })
+              }
+              type="number"
+              value={node.config.timeoutSeconds}
+            />
+          </Field>
+          <Field label="Tools">
+            <Input
+              onChange={(event) =>
+                onChange({
+                  ...node,
+                  config: {
+                    ...node.config,
+                    tools: event.currentTarget.value
+                      .split(",")
+                      .map((tool) => tool.trim())
+                      .filter(Boolean),
+                  },
+                })
+              }
+              placeholder="repository, terminal"
+              value={node.config.tools.join(", ")}
+            />
+          </Field>
+        </div>
         <RetryFields
           onChange={(retry) => onChange({ ...node, config: { ...node.config, retry } })}
           retry={node.config.retry}
@@ -351,6 +443,25 @@ function NodeConfiguration({
             />
           </Field>
         ) : null}
+        <Field label="Timeout (sec)">
+          <Input
+            min={1}
+            onChange={(event) =>
+              onChange({
+                ...node,
+                config: {
+                  ...node.config,
+                  timeoutSeconds: numberFromInput(
+                    event.currentTarget.value,
+                    node.config.timeoutSeconds,
+                  ),
+                },
+              } as WorkflowNode)
+            }
+            type="number"
+            value={node.config.timeoutSeconds}
+          />
+        </Field>
         <RetryFields
           onChange={(retry) =>
             onChange({ ...node, config: { ...node.config, retry } } as WorkflowNode)
@@ -518,21 +629,29 @@ function NodeConfiguration({
 
 export function WorkflowInspector({
   diagnostics,
+  kanbanViews,
   node,
   onClose,
+  onUpdateTriggerView,
   onUpdateNode,
   onUpdateWorkflow,
+  projectName,
+  triggerViewId,
   workflowDescription,
   workflowName,
 }: {
   readonly diagnostics: readonly WorkflowDiagnostic[];
+  readonly kanbanViews: readonly { readonly id: string; readonly name: string }[];
   readonly node: WorkflowNode | null;
   readonly onClose: () => void;
+  readonly onUpdateTriggerView: (viewId: string | null) => void;
   readonly onUpdateNode: (node: WorkflowNode) => void;
   readonly onUpdateWorkflow: (metadata: {
     readonly name: string;
     readonly description: string;
   }) => void;
+  readonly projectName: string;
+  readonly triggerViewId: string | null;
   readonly workflowDescription: string;
   readonly workflowName: string;
 }) {
@@ -549,6 +668,8 @@ export function WorkflowInspector({
   const relevantDiagnostics = node
     ? diagnostics.filter(({ nodeId }) => !nodeId || nodeId === node.id)
     : diagnostics;
+  const nodeMeta = node ? NODE_KIND_META[node.kind] : null;
+  const NodeIcon = nodeMeta?.icon ?? BoxesIcon;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -557,66 +678,152 @@ export function WorkflowInspector({
   };
 
   return (
-    <aside className="flex h-full min-h-0 w-[320px] shrink-0 flex-col border-l border-border/65 bg-background/96 shadow-[-12px_0_36px_-28px_hsl(var(--foreground)/0.35)] backdrop-blur-xl">
-      <div className="flex h-11 items-center justify-between border-b border-border/60 px-3.5">
-        <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-foreground">
-            {node ? node.name : "Workflow settings"}
-          </p>
-          <p className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
-            {node?.kind ?? "Template"}
-          </p>
+    <aside className="flex h-full min-h-0 w-[360px] shrink-0 flex-col border-l border-border/65 bg-background/97 shadow-[-18px_0_44px_-34px_hsl(var(--foreground)/0.45)] backdrop-blur-xl 2xl:w-[380px]">
+      <div className="border-b border-border/60 bg-gradient-to-b from-muted/35 to-transparent px-4 pb-3.5 pt-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-current/10",
+                nodeMeta?.className ?? "bg-foreground text-background",
+              )}
+            >
+              <NodeIcon className="size-4" />
+            </span>
+            <div className="min-w-0 pt-0.5">
+              <p className="truncate text-[13px] font-semibold text-foreground">
+                {node ? node.name : "Workflow settings"}
+              </p>
+              <div className="mt-1 flex items-center gap-1.5">
+                <Badge size="sm" variant="secondary">
+                  {nodeMeta?.label ?? "Reusable template"}
+                </Badge>
+                {node ? (
+                  <span className="truncate font-mono text-[8px] text-muted-foreground/70">
+                    {node.id}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          <Button aria-label="Close inspector" onClick={onClose} size="icon-xs" variant="ghost">
+            <XIcon />
+          </Button>
         </div>
-        <Button aria-label="Close inspector" onClick={onClose} size="icon-xs" variant="ghost">
-          <XIcon />
-        </Button>
+        <p className="mt-3 text-[10px] leading-4 text-muted-foreground">
+          {node
+            ? "Configure this step, its execution policy, and how it participates in the reusable workflow."
+            : "Edit the workspace template. Project issues can assign it without sharing run history."}
+        </p>
       </div>
 
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3.5">
           {draftNode ? (
             <>
-              <Field label="Step name">
-                <Input
-                  onChange={(event) =>
-                    setDraftNode({ ...draftNode, name: event.currentTarget.value } as WorkflowNode)
-                  }
-                  value={draftNode.name}
-                />
-              </Field>
-              <label className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5 text-xs">
-                <span>
-                  <span className="block font-medium">Enabled</span>
-                  <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                    Disabled steps remain visible but do not execute.
+              <InspectorSection
+                description="The title appears on the canvas; disabling preserves configuration without executing the step."
+                title="Step identity"
+              >
+                <Field label="Step name">
+                  <Input
+                    onChange={(event) =>
+                      setDraftNode({
+                        ...draftNode,
+                        name: event.currentTarget.value,
+                      } as WorkflowNode)
+                    }
+                    value={draftNode.name}
+                  />
+                </Field>
+                <label className="flex items-center justify-between rounded-lg border border-border/60 bg-background/70 px-3 py-2.5 text-xs">
+                  <span>
+                    <span className="block font-medium">Enabled</span>
+                    <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                      Disabled steps remain on the canvas.
+                    </span>
                   </span>
-                </span>
-                <input
-                  checked={!draftNode.disabled}
-                  className="size-4 accent-primary"
-                  onChange={(event) =>
-                    setDraftNode({
-                      ...draftNode,
-                      disabled: !event.currentTarget.checked,
-                    } as WorkflowNode)
-                  }
-                  type="checkbox"
-                />
-              </label>
-              <NodeConfiguration node={draftNode} onChange={setDraftNode} />
+                  <input
+                    checked={!draftNode.disabled}
+                    className="size-4 accent-primary"
+                    onChange={(event) =>
+                      setDraftNode({
+                        ...draftNode,
+                        disabled: !event.currentTarget.checked,
+                      } as WorkflowNode)
+                    }
+                    type="checkbox"
+                  />
+                </label>
+              </InspectorSection>
+
+              {draftNode.kind === "trigger" &&
+              (draftNode.config.event === "issue-status" ||
+                draftNode.config.event === "issue-queued") ? (
+                <InspectorSection
+                  description="This binding belongs to the project, so the workflow template remains reusable everywhere."
+                  title="Project board trigger"
+                >
+                  <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+                    <span className="flex items-center gap-2 text-[11px] font-medium">
+                      <Layers3Icon className="size-3.5 text-primary" />
+                      {projectName}
+                    </span>
+                    <Badge size="sm" variant="info">
+                      Project scope
+                    </Badge>
+                  </div>
+                  <Field label="Kanban board view">
+                    <select
+                      className={SELECT_CLASS_NAME}
+                      onChange={(event) =>
+                        onUpdateTriggerView(
+                          event.currentTarget.value === "__project__"
+                            ? null
+                            : event.currentTarget.value,
+                        )
+                      }
+                      value={triggerViewId ?? "__project__"}
+                    >
+                      <option value="__project__">All project issues</option>
+                      {kanbanViews.map((view) => (
+                        <option key={view.id} value={view.id}>
+                          {view.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <p className="rounded-lg border border-dashed border-border/70 px-2.5 py-2 text-[9px] leading-4 text-muted-foreground">
+                    Only issues matching this live board view can fire the trigger. Updating the
+                    view changes future matches without copying issues.
+                  </p>
+                </InspectorSection>
+              ) : null}
+
+              <InspectorSection
+                description="Every field is versioned with the workflow draft and validated before publication."
+                title="Configuration"
+              >
+                <NodeConfiguration node={draftNode} onChange={setDraftNode} />
+              </InspectorSection>
             </>
           ) : (
             <>
-              <Field label="Template name">
-                <Input onChange={(event) => setName(event.currentTarget.value)} value={name} />
-              </Field>
-              <Field label="Description">
-                <Textarea
-                  className="min-h-28 text-xs"
-                  onChange={(event) => setDescription(event.currentTarget.value)}
-                  value={description}
-                />
-              </Field>
+              <InspectorSection
+                description="Templates are shared across projects; publishing creates an immutable executable version."
+                title="Template details"
+              >
+                <Field label="Template name">
+                  <Input onChange={(event) => setName(event.currentTarget.value)} value={name} />
+                </Field>
+                <Field label="Description">
+                  <Textarea
+                    className="min-h-32 text-xs leading-relaxed"
+                    onChange={(event) => setDescription(event.currentTarget.value)}
+                    value={description}
+                  />
+                </Field>
+              </InspectorSection>
             </>
           )}
 
@@ -636,8 +843,21 @@ export function WorkflowInspector({
               ))}
             </section>
           ) : null}
+          {relevantDiagnostics.length === 0 ? (
+            <div className="flex items-start gap-2 rounded-xl border border-success/20 bg-success/5 px-3 py-2.5">
+              <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-success" />
+              <div>
+                <p className="text-[10px] font-medium text-success-foreground">
+                  Configuration is valid
+                </p>
+                <p className="mt-0.5 text-[9px] leading-4 text-muted-foreground">
+                  Save the draft to refresh graph-level publication checks.
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
-        <div className="border-t border-border/60 p-3">
+        <div className="border-t border-border/60 bg-background/96 p-3.5">
           <Button className="w-full" size="sm" type="submit">
             <SaveIcon />
             Save {node ? "step" : "workflow"}

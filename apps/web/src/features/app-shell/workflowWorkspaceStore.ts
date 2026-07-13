@@ -40,6 +40,7 @@ export interface WorkflowWorkspaceStore {
   readonly validationByTemplateId: Readonly<Record<string, WorkflowValidationReport>>;
   readonly testStateByNodeId: Readonly<Record<string, WorkflowTestState>>;
   readonly fullTestStateByTemplateId: Readonly<Record<string, WorkflowTestState>>;
+  readonly triggerBindings: Readonly<Record<string, WorkflowTriggerBinding>>;
   readonly executeCommand: (
     templateId: string,
     command: WorkflowCommand,
@@ -58,6 +59,7 @@ export interface WorkflowWorkspaceStore {
   readonly publish: (templateId: string) => WorkflowWorkspacePublishResult;
   readonly testNode: (nodeId: string) => WorkflowTestState | null;
   readonly testWorkflow: (templateId: string) => WorkflowTestState | null;
+  readonly setTriggerBinding: (binding: WorkflowTriggerBinding) => WorkflowWorkspaceMutationResult;
   readonly undo: (templateId: string) => WorkflowWorkspaceMutationResult;
   readonly redo: (templateId: string) => WorkflowWorkspaceMutationResult;
 }
@@ -73,6 +75,13 @@ export interface WorkflowTestState {
   readonly message: string;
   readonly durationMs: number | null;
   readonly updatedAt: string | null;
+}
+
+export interface WorkflowTriggerBinding {
+  readonly projectId: string;
+  readonly templateId: string;
+  readonly nodeId: string;
+  readonly viewId: string | null;
 }
 
 export interface CreateWorkflowTemplateInput {
@@ -115,6 +124,7 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
         validationByTemplateId: deriveValidationByTemplateId(templates),
         testStateByNodeId: deriveTestStateByNodeId(templates),
         fullTestStateByTemplateId: deriveFullTestStateByTemplateId(templates),
+        triggerBindings: {},
         executeCommand: (templateId, command) => {
           const state = get();
           const template = state.templates.find(({ id }) => id === templateId);
@@ -380,6 +390,36 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
           });
           return testState;
         },
+        setTriggerBinding: (binding) => {
+          const state = get();
+          const template = state.templates.find(({ id }) => id === binding.templateId);
+          const node = template?.draft.content.graph.nodes.find(({ id }) => id === binding.nodeId);
+          if (!template || node?.kind !== "trigger") {
+            return {
+              ok: false,
+              changed: false,
+              reason: "Project view bindings require an existing trigger node.",
+            };
+          }
+          const normalizedViewId = binding.viewId?.trim() || null;
+          const key = workflowTriggerBindingKey(
+            binding.projectId,
+            binding.templateId,
+            binding.nodeId,
+          );
+          const nextBinding = { ...binding, viewId: normalizedViewId };
+          const current = state.triggerBindings[key];
+          if (
+            current?.projectId === nextBinding.projectId &&
+            current.templateId === nextBinding.templateId &&
+            current.nodeId === nextBinding.nodeId &&
+            current.viewId === nextBinding.viewId
+          ) {
+            return { ok: true, changed: false };
+          }
+          set({ triggerBindings: { ...state.triggerBindings, [key]: nextBinding } });
+          return { ok: true, changed: true };
+        },
         undo: (templateId) => {
           const state = get();
           const template = state.templates.find(({ id }) => id === templateId);
@@ -404,8 +444,8 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
         },
       }),
       {
-        name: options.storageKey ?? "base:workflow-workspace:v1",
-        version: 1,
+        name: options.storageKey ?? "base:workflow-workspace:v2",
+        version: 2,
         storage: createJSONStorage(
           () =>
             options.storage ??
@@ -415,6 +455,7 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
           templates: state.templates,
           selectedTemplateId: state.selectedTemplateId,
           viewportByTemplateId: state.viewportByTemplateId,
+          triggerBindings: state.triggerBindings,
         }),
         merge: (persistedState, currentState) =>
           hydrateWorkflowWorkspaceState(
@@ -427,6 +468,14 @@ export function createWorkflowWorkspaceStore(options: WorkflowWorkspaceStoreOpti
 }
 
 export const useWorkflowWorkspaceStore = createWorkflowWorkspaceStore();
+
+export function workflowTriggerBindingKey(
+  projectId: string,
+  templateId: string,
+  nodeId: string,
+): string {
+  return `${projectId}:${templateId}:${nodeId}`;
+}
 
 export function deriveWorkflowSummaries(
   templates: readonly WorkflowTemplate[],
@@ -491,7 +540,32 @@ function hydrateWorkflowWorkspaceState(
     validationByTemplateId: deriveValidationByTemplateId(templates),
     testStateByNodeId: deriveTestStateByNodeId(templates),
     fullTestStateByTemplateId: deriveFullTestStateByTemplateId(templates),
+    triggerBindings: isWorkflowTriggerBindingRecord(persistedState.triggerBindings)
+      ? persistedState.triggerBindings
+      : {},
   };
+}
+
+function isWorkflowTriggerBindingRecord(
+  value: unknown,
+): value is Readonly<Record<string, WorkflowTriggerBinding>> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.values(value).every(
+      (binding) =>
+        typeof binding === "object" &&
+        binding !== null &&
+        "projectId" in binding &&
+        typeof binding.projectId === "string" &&
+        "templateId" in binding &&
+        typeof binding.templateId === "string" &&
+        "nodeId" in binding &&
+        typeof binding.nodeId === "string" &&
+        "viewId" in binding &&
+        (binding.viewId === null || typeof binding.viewId === "string"),
+    )
+  );
 }
 
 function isWorkflowTemplateArray(value: unknown): value is readonly WorkflowTemplate[] {

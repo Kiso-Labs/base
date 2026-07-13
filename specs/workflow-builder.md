@@ -10,6 +10,7 @@
 ## Template and run ownership
 
 - The workspace owns workflow templates. Each template contains one editable draft and zero or more immutable published versions.
+- A project may bind an issue-based trigger node to all project issues or one project-owned Kanban view. The binding references the live saved view and is persisted separately from the reusable template draft.
 - Publishing appends a version only when validation has no errors. Later draft edits never mutate a published version.
 - An issue references a workflow template. A project run records the template ID and exact published version it executes.
 - Switching projects changes visible issues and runs but never changes the reusable workflow catalog or template graphs.
@@ -19,6 +20,7 @@
 
 - Supported node kinds are trigger, agent, test, hook, approval, and branch.
 - Trigger configurations cover manual, issue lifecycle, repository, schedule, and webhook events.
+- Issue lifecycle and queue triggers expose a project binding in the inspector. Only issues matching the selected board view can fire that project installation of the workflow.
 - Agent, test, and hook nodes expose bounded retry policy with fixed or exponential backoff. Retry is node policy rather than an unbounded graph cycle.
 - Approval nodes define instructions, an approver group, an optional timeout, and timeout behavior.
 - Branch nodes define named conditional cases and a default path.
@@ -45,7 +47,7 @@
 
 - The builder uses an infinite pan-and-zoom canvas with subtle grid, fit/zoom controls, minimap, selection, keyboard deletion, and contextual add affordances.
 - Nodes stay compact at rest and show type, title, configuration summary, retry/error badges, and typed handles. Selection and hover reveal secondary actions without shifting layout.
-- The left rail switches between workflow templates and a searchable node library. The right inspector edits the selected node or workflow metadata.
+- The left rail switches between workflow templates and a searchable node library. The right inspector edits the selected node or workflow metadata and groups identity, project trigger scope, execution configuration, retry policy, and validation into clear sections.
 - The top command bar exposes save state, validation, publish/test actions, undo/redo, fit, and tidy controls with accurate disabled states and shortcut hints.
 - Edge color and labels communicate outcomes without relying on color alone. Invalid connections are rejected at the cursor and explained through validation feedback.
 - The layout remains usable on smaller desktop widths by collapsing secondary rails while preserving the canvas and inspector access.

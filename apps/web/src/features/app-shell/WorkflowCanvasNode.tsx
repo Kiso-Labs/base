@@ -5,6 +5,7 @@ import {
   Clock3Icon,
   FlaskConicalIcon,
   GitBranchIcon,
+  Layers3Icon,
   LoaderCircleIcon,
   PlayIcon,
   PlusIcon,
@@ -46,6 +47,7 @@ export type WorkflowCanvasNodeData = {
   readonly node: WorkflowNode;
   readonly findings?: readonly WorkflowCanvasFinding[];
   readonly testState?: WorkflowNodeTestState;
+  readonly bindingLabel?: string;
   readonly onAddAfter?: (nodeId: string) => void;
   readonly onInspect?: (nodeId: string) => void;
   readonly onTest?: (nodeId: string) => void;
@@ -268,8 +270,22 @@ function WorkflowCanvasNodeComponent({
             </div>
           </div>
 
-          {retry || node.disabled || findings.length > 0 || testState !== "idle" ? (
+          {retry ||
+          node.disabled ||
+          findings.length > 0 ||
+          testState !== "idle" ||
+          data.bindingLabel ? (
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              {data.bindingLabel ? (
+                <Badge
+                  size="sm"
+                  title={`Project trigger scope: ${data.bindingLabel}`}
+                  variant="info"
+                >
+                  <Layers3Icon />
+                  {data.bindingLabel}
+                </Badge>
+              ) : null}
               {retry ? <RetryBadge retry={retry} /> : null}
               {node.disabled ? (
                 <Badge size="sm" variant="secondary">
