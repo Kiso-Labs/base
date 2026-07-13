@@ -4,19 +4,25 @@ import {
   LayoutTemplateIcon,
   PlusIcon,
   SignalIcon,
-  WorkflowIcon,
+  TagIcon,
+  UserRoundIcon,
 } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { Button } from "~/components/ui/button";
-import { Dialog, DialogFooter, DialogPanel, DialogPopup } from "~/components/ui/dialog";
+import { Dialog, DialogPopup } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { toastManager } from "~/components/ui/toast";
 
 import { useBaseWorkspace } from "./BaseWorkspaceContext";
 import { BASE_ISSUE_TEMPLATES, applyIssueTemplate, type IssueDraft } from "./issueRepository";
+import {
+  IssueDialogActions,
+  IssueDialogForm,
+  IssuePropertyBar,
+  IssuePropertyButton,
+} from "./IssueDialogForm";
 import { IssueDialogHeader } from "./IssueDialogHeader";
-import { IssueMarkdownEditor } from "./IssueMarkdownEditor";
 import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
 import { IssuePropertySelect } from "./IssuePropertySelect";
 import { BASE_PRIORITIES, type BasePriority } from "./workspaceRepository";
@@ -144,159 +150,140 @@ export function IssueCreateDialog({
           projectIdentifier={selectedProject.identifier}
           projectName={selectedProject.name}
         />
-        <DialogPanel className="p-0" scrollFade={false}>
-          <form
-            className="flex min-h-full flex-col px-7 py-6 sm:px-10 sm:py-8"
-            id={formId}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                event.preventDefault();
-                event.currentTarget.requestSubmit();
-              }
-            }}
-            onSubmit={submit}
-          >
-            <div>
-              <Input
-                aria-invalid={titleError ? true : undefined}
-                autoFocus
-                aria-label="Issue title"
-                className="h-14 rounded-none border-0 bg-transparent px-0 font-heading text-2xl font-semibold shadow-none before:hidden placeholder:text-muted-foreground/55 has-focus-visible:border-transparent has-focus-visible:ring-0 sm:text-3xl"
-                id={`${formId}-title`}
-                onChange={(event) => {
-                  setTitle(event.currentTarget.value);
-                  if (titleError) setTitleError(null);
-                }}
-                placeholder="Issue title"
-                unstyled
-                value={title}
-              />
-              {titleError ? (
-                <p className="text-xs text-destructive-foreground">{titleError}</p>
-              ) : null}
-              <IssueMarkdownEditor
-                className="mt-3 min-h-56"
-                id={`${formId}-description`}
-                onChange={setDescription}
-                placeholder="Add description… Markdown is supported"
-                value={description}
-              />
-            </div>
+        <IssueDialogForm
+          autoFocusTitle
+          description={description}
+          descriptionId={`${formId}-description`}
+          formId={formId}
+          onDescriptionChange={setDescription}
+          onSubmit={submit}
+          onTitleChange={(value) => {
+            setTitle(value);
+            if (titleError) setTitleError(null);
+          }}
+          title={title}
+          titleError={titleError}
+          titleId={`${formId}-title`}
+        >
+          <IssuePropertyBar>
+            <IssuePropertySelect
+              icon={<CircleDashedIcon />}
+              label="Status"
+              onValueChange={(value) => setStatus(value as BaseIssueStatus)}
+              options={[
+                { label: "Backlog", value: "Backlog" },
+                { label: "Planned", value: "Planned" },
+                { label: "Ready", value: "Ready" },
+              ]}
+              size="sm"
+              value={status}
+              variant="pill"
+            />
+            <IssuePropertySelect
+              icon={<SignalIcon />}
+              label="Priority"
+              onValueChange={(value) => setPriority(value as BasePriority)}
+              options={BASE_PRIORITIES.map((value) => ({ label: value, value }))}
+              size="sm"
+              value={priority}
+              variant="pill"
+            />
+            <IssuePropertyButton
+              accessibleLabel="Edit assignee"
+              icon={<UserRoundIcon />}
+              onClick={() => setShowMoreFields(true)}
+            >
+              {assignee.trim() && assignee !== "Unassigned" ? assignee : "Assignee"}
+            </IssuePropertyButton>
+            <IssuePropertyButton
+              accessibleLabel="Edit labels"
+              icon={<TagIcon />}
+              onClick={() => setShowMoreFields(true)}
+            >
+              {labels.trim() || "Labels"}
+            </IssuePropertyButton>
+            <Button
+              aria-expanded={showMoreFields}
+              aria-label="More issue fields"
+              className="rounded-full"
+              onClick={() => setShowMoreFields((visible) => !visible)}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <EllipsisIcon />
+            </Button>
+          </IssuePropertyBar>
 
-            <div className="mt-auto flex flex-wrap items-center gap-2 pt-8">
-              <IssuePropertySelect
-                icon={<CircleDashedIcon />}
-                label="Status"
-                onValueChange={(value) => setStatus(value as BaseIssueStatus)}
-                options={[
-                  { label: "Backlog", value: "Backlog" },
-                  { label: "Planned", value: "Planned" },
-                  { label: "Ready", value: "Ready" },
-                ]}
-                size="sm"
-                value={status}
-                variant="pill"
-              />
-              <IssuePropertySelect
-                icon={<SignalIcon />}
-                label="Priority"
-                onValueChange={(value) => setPriority(value as BasePriority)}
-                options={BASE_PRIORITIES.map((value) => ({ label: value, value }))}
-                size="sm"
-                value={priority}
-                variant="pill"
-              />
-              <IssuePropertySelect
-                icon={<WorkflowIcon />}
-                label="Workflow template"
-                onValueChange={setWorkflowId}
-                options={workflowOptions}
-                size="sm"
-                value={workflowId}
-                variant="pill"
-              />
-              <Button
-                aria-expanded={showMoreFields}
-                aria-label="More issue fields"
-                className="rounded-full"
-                onClick={() => setShowMoreFields((visible) => !visible)}
-                size="icon-sm"
-                type="button"
-                variant="outline"
-              >
-                <EllipsisIcon />
-              </Button>
-            </div>
-
-            {showMoreFields ? (
-              <div className="mt-5 rounded-xl border border-border/60 bg-muted/15 p-4">
-                <div className="mb-4 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                  <LayoutTemplateIcon className="size-3.5" />
-                  Start from a template
-                </div>
-                <div className="grid gap-2 sm:grid-cols-4">
-                  <TemplateButton
-                    active={selectedTemplateId === "blank"}
-                    detail="Start clean"
-                    label="Blank issue"
-                    onClick={() => chooseTemplate("blank")}
-                  />
-                  {BASE_ISSUE_TEMPLATES.map((template) => (
-                    <TemplateButton
-                      active={selectedTemplateId === template.id}
-                      detail={`${template.defaults.priority} · ${template.defaults.status}`}
-                      key={template.id}
-                      label={template.name}
-                      onClick={() => chooseTemplate(template.id)}
-                      title={template.description}
-                    />
-                  ))}
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <IssueTextProperty
-                    label="Assignee"
-                    onChange={setAssignee}
-                    placeholder="Unassigned"
-                    value={assignee}
-                  />
-                  <IssueTextProperty
-                    label="Labels"
-                    onChange={setLabels}
-                    placeholder="bug, frontend"
-                    value={labels}
-                  />
-                  <IssueTextProperty
-                    label="Module"
-                    onChange={setModule}
-                    placeholder="Unassigned"
-                    value={module}
-                  />
-                  <IssueTextProperty
-                    label="Cycle"
-                    onChange={setCycle}
-                    placeholder="Unscheduled"
-                    value={cycle}
-                  />
-                </div>
+          {showMoreFields ? (
+            <div className="mt-5 rounded-xl border border-border/60 bg-muted/15 p-4">
+              <div className="mb-4 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <LayoutTemplateIcon className="size-3.5" />
+                Start from a template
               </div>
-            ) : null}
-          </form>
-        </DialogPanel>
-        <DialogFooter className="items-center border-t border-border/50 bg-background/95 px-6 py-3 sm:justify-between">
-          <span className="hidden text-xs text-muted-foreground sm:block">
-            Markdown renders automatically when you leave the description.
-          </span>
-          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-            <Button onClick={() => onOpenChange(false)} type="button" variant="ghost">
-              Cancel
-            </Button>
-            <Button form={formId} type="submit">
-              <PlusIcon />
-              Create issue
-              <span className="ml-1 font-mono text-[9px] opacity-65">⌘↵</span>
-            </Button>
-          </div>
-        </DialogFooter>
+              <div className="grid gap-2 sm:grid-cols-4">
+                <TemplateButton
+                  active={selectedTemplateId === "blank"}
+                  detail="Start clean"
+                  label="Blank issue"
+                  onClick={() => chooseTemplate("blank")}
+                />
+                {BASE_ISSUE_TEMPLATES.map((template) => (
+                  <TemplateButton
+                    active={selectedTemplateId === template.id}
+                    detail={`${template.defaults.priority} · ${template.defaults.status}`}
+                    key={template.id}
+                    label={template.name}
+                    onClick={() => chooseTemplate(template.id)}
+                    title={template.description}
+                  />
+                ))}
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <IssuePropertySelect
+                  label="Workflow template"
+                  onValueChange={setWorkflowId}
+                  options={workflowOptions}
+                  value={workflowId}
+                />
+                <IssueTextProperty
+                  label="Assignee"
+                  onChange={setAssignee}
+                  placeholder="Unassigned"
+                  value={assignee}
+                />
+                <IssueTextProperty
+                  label="Labels"
+                  onChange={setLabels}
+                  placeholder="bug, frontend"
+                  value={labels}
+                />
+                <IssueTextProperty
+                  label="Module"
+                  onChange={setModule}
+                  placeholder="Unassigned"
+                  value={module}
+                />
+                <IssueTextProperty
+                  label="Cycle"
+                  onChange={setCycle}
+                  placeholder="Unscheduled"
+                  value={cycle}
+                />
+              </div>
+            </div>
+          ) : null}
+        </IssueDialogForm>
+        <IssueDialogActions>
+          <Button onClick={() => onOpenChange(false)} type="button" variant="ghost">
+            Cancel
+          </Button>
+          <Button form={formId} type="submit">
+            <PlusIcon />
+            Create issue
+            <span className="ml-1 font-mono text-[9px] opacity-65">⌘↵</span>
+          </Button>
+        </IssueDialogActions>
       </DialogPopup>
     </Dialog>
   );
