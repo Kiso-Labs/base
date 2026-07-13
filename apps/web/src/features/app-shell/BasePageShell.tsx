@@ -25,6 +25,10 @@ export function BasePageShell({
   children,
   description,
   density = "default",
+  headerActions,
+  headerIcon,
+  headerTitleAccessory,
+  minimalHeader = false,
   showIntro,
   title,
 }: {
@@ -32,6 +36,10 @@ export function BasePageShell({
   readonly children: ReactNode;
   readonly description: string;
   readonly density?: "canvas" | "default" | "workspace";
+  readonly headerActions?: ReactNode;
+  readonly headerIcon?: ReactNode;
+  readonly headerTitleAccessory?: ReactNode;
+  readonly minimalHeader?: boolean;
   readonly showIntro?: boolean;
   readonly title: string;
 }) {
@@ -51,86 +59,101 @@ export function BasePageShell({
           )}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">
+            {headerIcon ? (
+              <span className="flex shrink-0 items-center justify-center">{headerIcon}</span>
+            ) : null}
             <span className="truncate text-xs font-medium text-foreground">
               {selectedProject.name}
             </span>
             <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/45" />
             <span className="truncate text-xs text-muted-foreground">{title}</span>
+            {headerTitleAccessory}
           </div>
 
-          <Button
-            className="mx-4 hidden w-64 justify-start border-border/70 bg-card/35 text-muted-foreground shadow-none lg:flex"
-            onClick={openCommandPalette}
-            size="sm"
-            variant="outline"
-          >
-            <SearchIcon className="size-3.5" />
-            <span className="min-w-0 flex-1 truncate text-left">Search Base</span>
-            {commandPaletteShortcutLabel ? (
-              <Kbd className="h-5 px-1 text-[9px]">{commandPaletteShortcutLabel}</Kbd>
-            ) : null}
-          </Button>
-
-          <div className="flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]">
-            <div className="mr-1 hidden items-center gap-1.5 border-r border-border/70 pr-3 xl:flex">
-              <span className="font-mono text-[10px] text-muted-foreground/75">
-                {selectedRepository.fullName}
-              </span>
-              <span className="flex items-center gap-1 rounded-sm bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                <GitBranchIcon className="size-3" />
-                {selectedRepository.defaultBranch}
-              </span>
-            </div>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    render={<Link to="/runs" />}
-                    aria-label={`${activeRunCount} active runs`}
-                    className="gap-1.5"
-                    size="sm"
-                    variant="ghost"
-                  />
-                }
+          {minimalHeader ? (
+            headerActions ? (
+              <div className="flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]">
+                {headerActions}
+              </div>
+            ) : null
+          ) : (
+            <>
+              <Button
+                className="mx-4 hidden w-64 justify-start border-border/70 bg-card/35 text-muted-foreground shadow-none lg:flex"
+                onClick={openCommandPalette}
+                size="sm"
+                variant="outline"
               >
-                <ListChecksIcon className="size-3.5" />
-                <span className="hidden text-xs sm:inline">Queue</span>
-                <span className="min-w-4 rounded-sm bg-info/10 px-1 font-mono text-[9px] leading-4 text-info-foreground">
-                  {activeRunCount}
-                </span>
-              </TooltipTrigger>
-              <TooltipPopup side="bottom">Open queue activity</TooltipPopup>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button aria-label="Notifications" size="icon-xs" variant="ghost">
-                    <BellIcon className="size-3.5" />
-                    <span className="absolute right-1 top-1 size-1.5 rounded-full bg-warning ring-2 ring-background" />
-                  </Button>
-                }
-              />
-              <TooltipPopup side="bottom">4 notifications need attention</TooltipPopup>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    render={<Link to="/settings" />}
-                    aria-label="Open Kiso Labs settings"
-                    className="ml-1 rounded-md border-border/70 bg-card text-[10px] font-semibold"
-                    size="icon-xs"
-                    variant="outline"
+                <SearchIcon className="size-3.5" />
+                <span className="min-w-0 flex-1 truncate text-left">Search Base</span>
+                {commandPaletteShortcutLabel ? (
+                  <Kbd className="h-5 px-1 text-[9px]">{commandPaletteShortcutLabel}</Kbd>
+                ) : null}
+              </Button>
+
+              <div className="flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]">
+                <div className="mr-1 hidden items-center gap-1.5 border-r border-border/70 pr-3 xl:flex">
+                  <span className="font-mono text-[10px] text-muted-foreground/75">
+                    {selectedRepository.fullName}
+                  </span>
+                  <span className="flex items-center gap-1 rounded-sm bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    <GitBranchIcon className="size-3" />
+                    {selectedRepository.defaultBranch}
+                  </span>
+                </div>
+                {headerActions}
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        render={<Link to="/runs" />}
+                        aria-label={`${activeRunCount} active runs`}
+                        className="gap-1.5"
+                        size="sm"
+                        variant="ghost"
+                      />
+                    }
                   >
-                    KL
-                  </Button>
-                }
-              />
-              <TooltipPopup align="end" side="bottom">
-                Kiso Labs settings
-              </TooltipPopup>
-            </Tooltip>
-          </div>
+                    <ListChecksIcon className="size-3.5" />
+                    <span className="hidden text-xs sm:inline">Queue</span>
+                    <span className="min-w-4 rounded-sm bg-info/10 px-1 font-mono text-[9px] leading-4 text-info-foreground">
+                      {activeRunCount}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipPopup side="bottom">Open queue activity</TooltipPopup>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button aria-label="Notifications" size="icon-xs" variant="ghost">
+                        <BellIcon className="size-3.5" />
+                        <span className="absolute right-1 top-1 size-1.5 rounded-full bg-warning ring-2 ring-background" />
+                      </Button>
+                    }
+                  />
+                  <TooltipPopup side="bottom">4 notifications need attention</TooltipPopup>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        render={<Link to="/settings" />}
+                        aria-label="Open Kiso Labs settings"
+                        className="ml-1 rounded-md border-border/70 bg-card text-[10px] font-semibold"
+                        size="icon-xs"
+                        variant="outline"
+                      >
+                        KL
+                      </Button>
+                    }
+                  />
+                  <TooltipPopup align="end" side="bottom">
+                    Kiso Labs settings
+                  </TooltipPopup>
+                </Tooltip>
+              </div>
+            </>
+          )}
         </header>
 
         <main

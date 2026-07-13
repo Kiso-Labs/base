@@ -22,6 +22,7 @@ import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagn
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as BaseWorkflowsRouteImport } from './routes/_base.workflows'
+import { Route as BaseViewsRouteImport } from './routes/_base.views'
 import { Route as BaseRunsRouteImport } from './routes/_base.runs'
 import { Route as BaseRepositoryRouteImport } from './routes/_base.repository'
 import { Route as BaseIssuesRouteImport } from './routes/_base.issues'
@@ -94,6 +95,11 @@ const BaseWorkflowsRoute = BaseWorkflowsRouteImport.update({
   path: '/workflows',
   getParentRoute: () => BaseRoute,
 } as any)
+const BaseViewsRoute = BaseViewsRouteImport.update({
+  id: '/views',
+  path: '/views',
+  getParentRoute: () => BaseRoute,
+} as any)
 const BaseRunsRoute = BaseRunsRouteImport.update({
   id: '/runs',
   path: '/runs',
@@ -146,6 +152,7 @@ export interface FileRoutesByFullPath {
   '/issues': typeof BaseIssuesRoute
   '/repository': typeof BaseRepositoryRoute
   '/runs': typeof BaseRunsRoute
+  '/views': typeof BaseViewsRoute
   '/workflows': typeof BaseWorkflowsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
@@ -167,6 +174,7 @@ export interface FileRoutesByTo {
   '/issues': typeof BaseIssuesRoute
   '/repository': typeof BaseRepositoryRoute
   '/runs': typeof BaseRunsRoute
+  '/views': typeof BaseViewsRoute
   '/workflows': typeof BaseWorkflowsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
@@ -190,6 +198,7 @@ export interface FileRoutesById {
   '/_base/issues': typeof BaseIssuesRoute
   '/_base/repository': typeof BaseRepositoryRoute
   '/_base/runs': typeof BaseRunsRoute
+  '/_base/views': typeof BaseViewsRoute
   '/_base/workflows': typeof BaseWorkflowsRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
@@ -214,6 +223,7 @@ export interface FileRouteTypes {
     | '/issues'
     | '/repository'
     | '/runs'
+    | '/views'
     | '/workflows'
     | '/settings/archived'
     | '/settings/connections'
@@ -235,6 +245,7 @@ export interface FileRouteTypes {
     | '/issues'
     | '/repository'
     | '/runs'
+    | '/views'
     | '/workflows'
     | '/settings/archived'
     | '/settings/connections'
@@ -257,6 +268,7 @@ export interface FileRouteTypes {
     | '/_base/issues'
     | '/_base/repository'
     | '/_base/runs'
+    | '/_base/views'
     | '/_base/workflows'
     | '/settings/archived'
     | '/settings/connections'
@@ -370,6 +382,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BaseWorkflowsRouteImport
       parentRoute: typeof BaseRoute
     }
+    '/_base/views': {
+      id: '/_base/views'
+      path: '/views'
+      fullPath: '/views'
+      preLoaderRoute: typeof BaseViewsRouteImport
+      parentRoute: typeof BaseRoute
+    }
     '/_base/runs': {
       id: '/_base/runs'
       path: '/runs'
@@ -436,6 +455,7 @@ interface BaseRouteChildren {
   BaseIssuesRoute: typeof BaseIssuesRoute
   BaseRepositoryRoute: typeof BaseRepositoryRoute
   BaseRunsRoute: typeof BaseRunsRoute
+  BaseViewsRoute: typeof BaseViewsRoute
   BaseWorkflowsRoute: typeof BaseWorkflowsRoute
 }
 
@@ -446,6 +466,7 @@ const BaseRouteChildren: BaseRouteChildren = {
   BaseIssuesRoute: BaseIssuesRoute,
   BaseRepositoryRoute: BaseRepositoryRoute,
   BaseRunsRoute: BaseRunsRoute,
+  BaseViewsRoute: BaseViewsRoute,
   BaseWorkflowsRoute: BaseWorkflowsRoute,
 }
 

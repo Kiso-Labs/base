@@ -144,7 +144,7 @@ export function ProjectIssueViewBar({
             </span>
           </div>
 
-          <div className="ml-auto flex flex-wrap items-center gap-1">
+          <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-1">
             <IssueViewToggle />
             {layout === "list" ? (
               <Select

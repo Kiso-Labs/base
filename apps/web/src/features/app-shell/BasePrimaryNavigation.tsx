@@ -1,10 +1,10 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   BoxIcon,
   ChevronDownIcon,
   CopyIcon,
-  EllipsisIcon,
   Layers3Icon,
+  LibraryBigIcon,
   MegaphoneIcon,
   ScanIcon,
   SearchIcon,
@@ -29,6 +29,7 @@ import {
   type BaseNavigationItem,
 } from "./navigation";
 import { useCommandPaletteShortcutLabel } from "./useCommandPaletteShortcutLabel";
+import { useIssueWorkspaceStore } from "./issueWorkspaceStore";
 import { selectActiveRunCount, selectAttentionCount } from "./workspaceRepository";
 
 const navigationItemById = new Map(BASE_NAVIGATION_ITEMS.map((item) => [item.id, item]));
@@ -47,16 +48,9 @@ const QUICK_NAVIGATION_ITEMS = [
   navigationItem("issues", { icon: ScanIcon, label: "My issues" }),
 ] as const;
 
-const WORKSPACE_NAVIGATION_ITEMS = [
-  navigationItem("agents", { icon: BoxIcon, label: "Projects" }),
-  navigationItem("board", { icon: Layers3Icon, label: "Views" }),
-  navigationItem("workflows", { icon: EllipsisIcon, label: "More" }),
-] as const;
-
 const TEAM_NAVIGATION_ITEMS = [
   navigationItem("issues", { icon: CopyIcon }),
   navigationItem("agents", { icon: BoxIcon, label: "Projects" }),
-  navigationItem("board", { icon: Layers3Icon, label: "Views" }),
 ] as const;
 
 const BUILD_NAVIGATION_ITEMS = [
@@ -66,16 +60,24 @@ const BUILD_NAVIGATION_ITEMS = [
   navigationItem("settings"),
 ] as const;
 
-const TEAM_NAVIGATION_IDS = new Set<BaseNavigationId>(["issues", "agents", "board"]);
+const TEAM_NAVIGATION_IDS = new Set<BaseNavigationId>(TEAM_NAVIGATION_ITEMS.map(({ id }) => id));
 
 export function BasePrimaryNavigation() {
   const pathname = useLocation({ select: (location) => location.pathname });
+  const navigate = useNavigate();
   const activeItem = resolveBaseNavigationItem(pathname);
   const openCommandPalette = useOpenCommandPalette();
   const commandPaletteShortcutLabel = useCommandPaletteShortcutLabel();
   const { selectedProject, snapshot } = useBaseWorkspace();
   const { isMobile, setOpenMobile } = useSidebar();
   const [teamOpen, setTeamOpen] = useState(true);
+  const [viewsOpen, setViewsOpen] = useState(false);
+  const views = useIssueWorkspaceStore((state) => state.views);
+  const activeViewId = useIssueWorkspaceStore(
+    (state) => state.activeViewIdByProject[selectedProject.id] ?? null,
+  );
+  const activateView = useIssueWorkspaceStore((state) => state.activateView);
+  const projectViews = views.filter(({ projectId }) => projectId === selectedProject.id);
   const badgeById: Partial<Record<BaseNavigationId, string>> = {
     inbox: String(selectAttentionCount(snapshot, selectedProject.id)),
     runs: String(selectActiveRunCount(snapshot, selectedProject.id)),
@@ -107,17 +109,11 @@ export function BasePrimaryNavigation() {
           onNavigate={closeMobileSidebar}
         />
 
-        <NavigationGroup
-          activeItemId={null}
-          badgeById={badgeById}
-          className="mt-5"
-          items={WORKSPACE_NAVIGATION_ITEMS}
-          label="Workspace"
-          onNavigate={closeMobileSidebar}
-        />
-
         <div className="mt-5">
-          <p className="mb-1 px-2 text-[11px] font-medium text-muted-foreground/65">Your teams</p>
+          <p className="mb-1 flex items-center gap-1 px-2 text-[11px] font-medium text-muted-foreground/65">
+            Your teams
+            <ChevronDownIcon className="size-2.5" />
+          </p>
           <button
             aria-expanded={teamOpen}
             className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[12px] font-medium text-foreground/80 outline-hidden transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -151,6 +147,49 @@ export function BasePrimaryNavigation() {
                   </SidebarMenuItem>
                 );
               })}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  aria-expanded={viewsOpen}
+                  className="h-7 gap-2 rounded-lg px-2 text-[13px]"
+                  isActive={pathname === "/board"}
+                  onClick={() => setViewsOpen((open) => !open)}
+                  size="sm"
+                  title="Saved issue views"
+                >
+                  <Layers3Icon className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">Views</span>
+                  <ChevronDownIcon
+                    className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${viewsOpen ? "" : "-rotate-90"}`}
+                  />
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              {viewsOpen ? (
+                <SidebarMenuItem>
+                  <SidebarMenu className="pl-3">
+                    {projectViews.map((view) => (
+                      <SidebarMenuItem key={view.id}>
+                        <SidebarMenuButton
+                          className="h-7 gap-2 px-2 text-[11px]"
+                          isActive={
+                            view.id === activeViewId &&
+                            (pathname === "/issues" || pathname === "/board")
+                          }
+                          onClick={() => {
+                            activateView(selectedProject.id, view.id);
+                            void navigate({ to: view.layout === "board" ? "/board" : "/issues" });
+                            closeMobileSidebar();
+                          }}
+                          size="sm"
+                          title={`${view.name} · ${view.layout}`}
+                        >
+                          <LibraryBigIcon className="size-3 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate">{view.name}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarMenuItem>
+              ) : null}
             </SidebarMenu>
           ) : null}
         </div>

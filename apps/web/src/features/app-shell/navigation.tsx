@@ -1,9 +1,9 @@
 import {
   BotIcon,
-  Columns3Icon,
   GitBranchIcon,
   HistoryIcon,
   InboxIcon,
+  Layers3Icon,
   ListTodoIcon,
   SettingsIcon,
   WorkflowIcon,
@@ -24,6 +24,7 @@ export type BaseNavigationPath =
   | "/inbox"
   | "/issues"
   | "/board"
+  | "/views"
   | "/workflows"
   | "/runs"
   | "/agents"
@@ -58,11 +59,11 @@ export const BASE_NAVIGATION_ITEMS: readonly BaseNavigationItem[] = [
   },
   {
     id: "board",
-    label: "Board",
-    to: "/board",
-    description: "Track work across delivery states",
-    searchTerms: ["kanban", "status", "columns"],
-    icon: Columns3Icon,
+    label: "Views",
+    to: "/views",
+    description: "Create and open saved issue views",
+    searchTerms: ["saved views", "filters", "issues", "kanban", "list"],
+    icon: Layers3Icon,
   },
   {
     id: "workflows",
